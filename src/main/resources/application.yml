@@ -1,0 +1,41 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: yuzu-game
+
+  datasource:
+    url: jdbc:mysql://localhost/yuzu?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
+    username: your_username
+    password: yuzu_password
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+
+  data:
+    redis:
+      host: your_redis_host_ip
+      port: 6379
+      password: your_redis_password
+      timeout: 5000ms
+
+yuzu:
+  llm:
+    base-url: https://api.deepseek.com/v1
+    api-key: your_api_key
+    model: deepseek-v4-flash
+  audit-llm:
+    base-url: https://api.moonshot.cn/v1
+    api-key: your_api_key
+    model: kimi-k2.5
+
+logging:
+  level:
+    com.yuzugame: DEBUG

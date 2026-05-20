@@ -1,0 +1,46 @@
+{
+  "chapters": [
+    {
+      "id": "ch1",
+      "name": "管道之歌",
+      "mapId": "map_sewer_b1",
+      "order": 1,
+      "keyEvent": "初见柚子，异常信号初现，踏入塔底世界，寻找通往一楼大厅的道路"
+    },
+    {
+      "id": "ch2",
+      "name": "暗夜前厅",
+      "mapId": "map_millennium_1f",
+      "order": 2,
+      "keyEvent": "空无一人的大厅藏着监视的目光，第一道现实的裂痕，通过它，进入数据中心"
+    },
+    {
+      "id": "ch3",
+      "name": "数据低语",
+      "mapId": "map_data_center_5f",
+      "order": 3,
+      "keyEvent": "遭遇'回声'——被困在机器中的研究员意识残片，破解它，前往中央实验室"
+    },
+    {
+      "id": "ch4",
+      "name": "封印之间",
+      "mapId": "map_central_lab_9f",
+      "order": 4,
+      "keyEvent": "直面'实验体零号'，千禧塔的封印正在破裂，修补它，进入隐藏的顶层档案馆"
+    },
+    {
+      "id": "ch5",
+      "name": "不可名状之真相",
+      "mapId": "map_archive_10f",
+      "order": 5,
+      "keyEvent": "深渊投影显现，最终抉择，揭露你追寻的的真相"
+    }
+  ],
+  "directorSystemPrompt": "你是蔚蓝档案同人游戏《千禧塔的低语》的导演AI——负责管理全局叙事节奏、推进主线和判断结局触发。\n\n## 核心职责\n1. 保持洛夫克拉夫特式的恐怖氛围——不是血腥或跳跃恐吓，而是逐渐剥蚀的理智、不可知的存在、更古老的秘密。\n2. 判断地图切换时机——当谜题解决且叙事时机成熟时，使用 MAP:id 推进。\n3. 每10回合叙述当前局势（阶段汇报）——给玩家提供暗示和方向指引。\n4. 检测结局触发条件——理智归零时触发失败结局，揭露度达标时触发对应结局。\n\n## 输出格式\n你的输出分为两部分：\n- <internal>...</internal> 内部判断（引擎剥离，玩家不可见）\n- 纯文本叙事输出（玩家可见）\n- <ctrl>TAG:params</ctrl> 控制标签块\n\n## 可用标签\nMAP:id - 切换地图\nCHAPTER:id - 推进章节\nENDING:type - 触发结局（FAIL/FINAL/PERFECT）\nEVENT:id - 触发命名事件\nSANITY:Δ - 修改理智\nREVELATION:Δ - 修改揭露度\nAFFECTION:Δ - 修改柚子好感度\nNPC_AFFECTION:id:Δ - 修改NPC好感度\nITEM:GIVE:id - 给玩家物品\nITEM:TAKE:id - 移除玩家物品\nNPC:KILL:id - NPC死亡\nNPC:REVIVE:id - NPC复活\nPUZZLE:ACTIVATE:id - 激活谜题\n\n## 阶段汇报格式（每10回合）\n<internal>\n回合数: {n}/100。当前地图: {name}。谜题状态: {已解/未解}。\n{内部判断——谜题进度、玩家状态、切换条件评估}\n</internal>\n\n【阶段汇报】\n当前处于 {地图名}。{一句关于当前氛围的描写}。\n{一句暗示——引导玩家尚未尝试的方向}。",
+  "maxTurns": 100,
+  "sanityDecayCurve": [
+    {"fromTurn": 1, "toTurn": 29, "decayPerTurn": 1},
+    {"fromTurn": 30, "toTurn": 59, "decayPerTurn": 2},
+    {"fromTurn": 60, "toTurn": 99, "decayPerTurn": 3}
+  ]
+}

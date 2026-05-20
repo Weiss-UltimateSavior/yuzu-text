@@ -1,0 +1,44 @@
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath
+
+# Build
+target/
+build/
+out/
+*.class
+*.jar
+*.war
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment & Secrets
+.env
+.env.*
+*.local
+application-local.yml
+application-local.properties
+
+# Logs
+*.log
+logs/
+
+# Runtime
+*.pid
+*.seed
+
+# Dependencies (Maven wrapper jar is kept)
+.mvn/wrapper/maven-wrapper.jar
+
+# Test artifacts
+test_output/

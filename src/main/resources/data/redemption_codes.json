@@ -1,0 +1,31 @@
+[
+  {
+    "code": "uzqueen",
+    "description": "减少10揭露，恢复15点理智",
+    "rewards": { "revelation": -10, "sanity": 15 },
+    "maxUses": 1,
+    "active": true
+  },
+  {
+    "code": "开发者模式",
+    "description": "属性全面加5",
+    "rewards": { "revelation": 5, "sanity": 5, "affection": 5, "turn": -5 },
+    "maxUses": 1,
+    "active": true
+  },
+
+  {
+    "code": "全面补给",
+    "description": "理智+15 揭露度+10 好感度+5 回合+3",
+    "rewards": { "sanity": 15, "revelation": 10, "affection": 5, "turn": 3 },
+    "maxUses": 1,
+    "active": false
+  },
+  {
+    "code": "YUZU_AFFECTION_10",
+    "description": "增加10点柚子好感度",
+    "rewards": { "affection": 10 },
+    "maxUses": 1,
+    "active": false
+  }
+]

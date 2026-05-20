@@ -1,0 +1,80 @@
+[
+  {
+    "type": "FAIL",
+    "description": "理智归零",
+    "priority": 1,
+    "conditions": [
+      {"field": "player.sanity", "operator": "lte", "value": 0}
+    ],
+    "logic": "AND",
+    "narrativeHint": "陷入疯狂，或被真相吞噬。请生成一段关于迷失与崩溃的悲剧结局叙事。"
+  },
+  {
+    "type": "HIDDEN",
+    "description": "好感度≥80+理智<60+揭露度<60：与柚子一起迷失",
+    "priority": 2,
+    "conditions": [
+      {"field": "currentChapter", "operator": "eq", "value": "ch5"},
+      {"field": "player.affection", "operator": "gte", "value": 80},
+      {"field": "player.sanity", "operator": "lt", "value": 60},
+      {"field": "player.revelation", "operator": "lt", "value": 60}
+    ],
+    "logic": "AND",
+    "narrativeHint": "你与柚子的羁绊如此之深，以至于宁愿放弃真相，也要与她一同沉沦。请生成一段关于两人携手迷失在虚妄中的结局叙事——不是悲剧，而是一种温柔的逃避，柚子选择陪玩家留在未醒的梦里。"
+  },
+  {
+    "type": "SECRET",
+    "description": "最终章节+好感度≥隐藏阈值",
+    "priority": 3,
+    "conditions": [
+      {"field": "currentChapter", "operator": "eq", "value": "ch5"},
+      {"field": "player.affection", "operator": "gte", "value": 80}
+    ],
+    "logic": "AND",
+    "narrativeHint": "与柚子的羁绊超越了真相本身。请生成一段关于羁绊与选择的温暖结局叙事。"
+  },
+  {
+    "type": "PERFECT",
+    "description": "最终章节+揭露度≥完美阈值",
+    "priority": 4,
+    "conditions": [
+      {"field": "currentChapter", "operator": "eq", "value": "ch5"},
+      {"field": "player.revelation", "operator": "gte", "value": 100}
+    ],
+    "logic": "AND",
+    "narrativeHint": "在真相的最深处彻悟一切。请生成一段关于彻悟与超越的壮丽结局叙事。"
+  },
+  {
+    "type": "FINAL",
+    "description": "最终章节+揭露度≥普通阈值",
+    "priority": 5,
+    "conditions": [
+      {"field": "currentChapter", "operator": "eq", "value": "ch5"},
+      {"field": "player.revelation", "operator": "gte", "value": 60}
+    ],
+    "logic": "AND",
+    "narrativeHint": "揭露部分真相，但未达完全。请生成一段关于遗憾与希望的结局叙事。"
+  },
+  {
+    "type": "FINAL",
+    "description": "回合耗尽+总分≥普通阈值",
+    "priority": 6,
+    "conditions": [
+      {"field": "turn", "operator": "gte", "value": 100},
+      {"field": "score", "operator": "gte", "value": 150}
+    ],
+    "logic": "AND",
+    "narrativeHint": "揭露部分真相，但未达完全。请生成一段关于遗憾与希望的结局叙事。"
+  },
+  {
+    "type": "FAIL",
+    "description": "回合耗尽+总分＜失败阈值",
+    "priority": 7,
+    "conditions": [
+      {"field": "turn", "operator": "gte", "value": 100},
+      {"field": "score", "operator": "lt", "value": 150}
+    ],
+    "logic": "AND",
+    "narrativeHint": "陷入疯狂，或被真相吞噬。请生成一段关于迷失与崩溃的悲剧结局叙事。"
+  }
+]

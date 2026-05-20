@@ -1,0 +1,58 @@
+{
+  "exploreKeywords": "观察|看看|周围|环境|探索|调查|检查|触碰|操作|启动|破解|查看|搜寻|翻找|审视|打量|深入|走去|走向|靠近|接近|进入",
+  "moveKeywords": "前进|移动|离开|前往|上去|下楼|上楼|进入|出发|通过|穿过|迈向|踏上|去往",
+  "npcMentionPattern": "@(\\S+)\\s+(.+)",
+  "outputPrefixes": {
+    "environment": "【环境】",
+    "protagonist": "【柚子】",
+    "puzzle": "【谜题】",
+    "director": "【导演旁白】",
+    "directorOpening": "【导演开场白】\n",
+    "innerThought": "【内心】",
+    "system": "【系统】",
+    "hint": "【提示】",
+    "ending": "【结局】",
+    "protagonistEnding": "【柚子最终台词】",
+    "systemWarning": "【系统警告】",
+    "npcPrefix": "【{npcName}】",
+    "puzzleActivated": "【系统】谜题已激活：{name} — {description}",
+    "exitOpened": "【系统】出口已开启 — {exitHint}",
+    "itemObtained": "【系统】获得了「{itemName}」",
+    "itemsPickedUp": "【系统】获得了 {count} 件物品",
+    "gameEnded": "[游戏已结束 - {endingType}]",
+    "npcNotFound": "【提示】迷雾尚未揭露。",
+    "npcKilled": "【提示】{npcName}已经不在了。",
+    "npcNotHere": "【提示】{npcName}不在这里，你需要在更深层的地方寻找。",
+    "npcRefuseTalk": "【提示】{npcName}此刻不愿与你交谈。"
+  },
+  "sanityWarningThresholds": [60, 30, 10],
+  "stageReportInterval": 10,
+  "fallbackPuzzleActivationTurns": 5,
+  "autoPickupLimit": 2,
+  "archiveMapId": "map_archive_10f",
+  "archiveRevelationBonus": 3,
+  "explorationRevelationBonus": 1,
+  "npcDialogueRevelationBonus": 1,
+  "npcUnlockSanityReward": 15,
+  "puzzleRewards": {
+    "revelation": {
+      "1": 5, "2": 7, "3": 9, "4": 11, "default": 11
+    },
+    "sanity": {
+      "1": 2, "2": 2, "3": 2, "4": 2, "default": 2
+    }
+  },
+  "chapterRevelationRewards": {
+    "ch2": 3, "ch3": 5, "ch4": 7, "ch5": 10, "default": 2
+  },
+  "startingMapId": "map_sewer_b1",
+  "startingChapter": "ch1",
+  "npcGiftItemIdTemplate": "item_{npcId}_gift",
+  "npcGiftNameTemplate": "{npcName}的赠礼",
+  "npcGiftDialogueThreshold": 2,
+  "puzzleMinRoundsBase": 2,
+  "maxPuzzleMemoryRounds": 20,
+  "mapAiHistoryLimit": 30,
+  "npcAiHistoryLimit": 30,
+  "protagonistAiHistoryLimit": 100
+}
