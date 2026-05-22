@@ -42,7 +42,7 @@ public class GameStateManager {
      * <p>匹配格式如：{@code PUZZLE:SOLVE:id}、{@code SANITY:-3}、{@code MAP:id} 等。
      * 仅在 {@code <ctrl>} 块提取结果为空时启用，避免重复提取。</p>
      */
-    private static final Pattern BARE_TAG = Pattern.compile("(PUZZLE:(?:SOLVE|FAIL|ACTIVATE):\\S+|SANITY:[+-]?\\d+|REVELATION:[+-]?\\d+|AFFECTION:[+-]?\\d+|MAP:\\S+|CHAPTER:\\S+|ITEM:(?:GIVE|TAKE|CREATE|USE):\\S+|ITEM:FOUND:\\S+|NPC:(?:UNLOCK|KILL|REVIVE):\\S+|NPC_AFFECTION:\\S+:[+-]?\\d+|ENDING:\\S+)");
+    private static final Pattern BARE_TAG = Pattern.compile("(PUZZLE:(?:SOLVE|FAIL|ACTIVATE):\\S+|SANITY:[+-]?\\d+|REVELATION:[+-]?\\d+|AFFECTION:[+-]?\\d+|MAP:\\S+|CHAPTER:\\S+|ITEM:(?:GIVE|TAKE|CREATE|USE):\\S+|ITEM:FOUND:\\S+|NPC:(?:UNLOCK|KILL|REVIVE):\\S+|NPC_AFFECTION:\\S+:[+-]?\\d+|ENDING:\\S+|AREA:\\S+)");
 
     /**
      * Agent 类型枚举 —— 用于控制标签的权限校验。
@@ -149,6 +149,7 @@ public class GameStateManager {
                 case "SANITY", "REVELATION", "AFFECTION" -> true;
                 case "ITEM" -> "FOUND".equals(action);
                 case "PUZZLE" -> "ACTIVATE".equals(action);
+                case "AREA" -> true;
                 default -> false;
             };
             case NPC -> switch (category) {
@@ -216,6 +217,7 @@ public class GameStateManager {
                 case "CHAPTER" -> handleChapter(session, action);
                 case "ENDING" -> handleEnding(session, action);
                 case "EVENT" -> handleEvent(session, action);
+                case "AREA" -> handleArea(session, action);
                 default -> null;
             };
         } catch (Exception e) {
@@ -287,9 +289,7 @@ public class GameStateManager {
                     session.removeYuzuItem(itemId);
                 }
                 session.getPlayer().addItem(itemId);
-                if (!itemName.equals(itemId)) {
-                    session.registerDynamicItemName(itemId, itemName);
-                }
+                session.registerDynamicItemName(itemId, itemName);
                 log.debug("Item given to player: {} ({})", itemId, itemName);
                 yield null;
             }
@@ -302,9 +302,7 @@ public class GameStateManager {
                     itemName = itemId;
                 }
                 session.foundItem(itemId);
-                if (!itemName.equals(itemId)) {
-                    session.registerDynamicItemName(itemId, itemName);
-                }
+                session.registerDynamicItemName(itemId, itemName);
                 log.debug("Item found in scene: {} ({})", itemId, itemName);
                 yield null;
             }
@@ -432,6 +430,14 @@ public class GameStateManager {
     /** 处理 EVENT:eventId 标签 —— 触发命名事件（预留扩展） */
     private String handleEvent(GameSession session, String eventId) {
         log.debug("Event triggered: {}", eventId);
+        return null;
+    }
+
+    /** 处理 AREA:区域名称 标签 —— 更新玩家当前所在区域 */
+    private String handleArea(GameSession session, String areaName) {
+        areaName = areaName.trim();
+        session.setCurrentArea(areaName);
+        log.debug("Player area updated to: {}", areaName);
         return null;
     }
 }

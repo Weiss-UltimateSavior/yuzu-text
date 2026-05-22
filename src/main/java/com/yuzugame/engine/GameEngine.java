@@ -269,20 +269,19 @@ public class GameEngine {
                             outputs.add("【" + npc.getName() + "】" + npcStripped);
                         }
                         session.addChatMessage(new GameSession.ChatMessage("NPC_AI", npc.getId(), npcStripped));
+                        int inventorySizeBefore = session.getPlayer().getInventory().size();
                         stateManager.applyControlTags(session, npcResp, AgentType.NPC);
                         int prevCount = session.getNpcDialogueCount(npc.getId());
                         session.incrementNpcDialogueCount(npc.getId());
 
-                        // 第3次对话自动给道具：prevCount==2 表示即将进入第3次
-                        // 道具ID格式：item_{npcId}_gift，名称：{NPC名}的赠礼
-                        // 如果AI已通过 ITEM:GIVE 标签给了道具，则跳过自动发放
-                        if (prevCount == gameConfig().getNpcGiftDialogueThreshold() - 1 && !session.getPlayer().hasItem(gameConfig().getNpcGiftItemIdTemplate().replace("{npcId}", npc.getId()))) {
+                        if (prevCount == gameConfig().getNpcGiftDialogueThreshold() - 1
+                                && session.getPlayer().getInventory().size() == inventorySizeBefore) {
                             String giftId = gameConfig().getNpcGiftItemIdTemplate().replace("{npcId}", npc.getId());
-                            String giftName = npc.getName() + gameConfig().getNpcGiftNameTemplate();
+                            String giftName = gameConfig().getNpcGiftNameTemplate().replace("{npcName}", npc.getName());
                             session.getPlayer().addItem(giftId);
                             session.registerDynamicItemName(giftId, giftName);
                             outputs.add(outputPrefix("system") + "获得了「" + giftName + "」");
-                            log.info("[NPC:{}] Auto-gave item {} ({}) on 3rd dialogue", npc.getId(), giftId, giftName);
+                            log.info("[NPC:{}] Auto-gave item {} ({}) on {}th dialogue (AI did not give item)", npc.getId(), giftId, giftName, gameConfig().getNpcGiftDialogueThreshold());
                         }
 
                         session.getPlayer().addRevelation(gameConfig().getNpcDialogueRevelationBonus());
@@ -359,6 +358,7 @@ public class GameEngine {
                 session.setExitUnlocked(false);
                 session.setMapAutoTriggered(false);
                 session.setMapEntryTurn(session.getTurn());
+                session.setCurrentArea(null);
 
                 for (StoryConfig.ChapterDef ch : story.getChapters()) {
                     if (ch.getMapId().equals(nextMapId)) {
@@ -433,6 +433,7 @@ public class GameEngine {
         StoryConfig story = dataLoader.getStory();
         session.setCurrentMapId(gameConfig().getStartingMapId());
         session.setCurrentChapter(gameConfig().getStartingChapter());
+        session.setCurrentArea(null);
         session.setGamePhase("opening");
         session.setTurn(0);
 

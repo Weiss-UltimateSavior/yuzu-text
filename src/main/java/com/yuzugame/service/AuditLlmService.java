@@ -55,6 +55,17 @@ public class AuditLlmService {
     @Value("${yuzu.audit-llm.model:${yuzu.llm.model}}")
     private String model;
 
+    public String getBaseUrl() { return baseUrl; }
+    public String getApiKey() { return apiKey; }
+    public String getModel() { return model; }
+
+    public void updateConfig(String baseUrl, String apiKey, String model) {
+        if (baseUrl != null && !baseUrl.isEmpty()) this.baseUrl = baseUrl;
+        if (apiKey != null && !apiKey.isEmpty()) this.apiKey = apiKey;
+        if (model != null && !model.isEmpty()) this.model = model;
+        log.info("AuditLlmService config updated: baseUrl={}, model={}", this.baseUrl, this.model);
+    }
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private final HttpClient client = createClient();

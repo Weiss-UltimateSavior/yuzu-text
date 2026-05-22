@@ -306,12 +306,51 @@ public class GameService {
         state.put("endingType", session.getEndingType());
         state.put("score", session.getScore());
 
-        Map<String, String> itemNames = new LinkedHashMap<>();
+        Map<String, Map<String, String>> presetItemMap = new LinkedHashMap<>();
         for (Map.Entry<String, ItemConfig> e : dataLoader.getAllItems().entrySet()) {
-            itemNames.put(e.getKey(), e.getValue().getName());
+            Map<String, String> detail = new LinkedHashMap<>();
+            detail.put("name", e.getValue().getName());
+            detail.put("type", e.getValue().getType());
+            detail.put("description", e.getValue().getDescription());
+            presetItemMap.put(e.getKey(), detail);
         }
-        itemNames.putAll(session.getDynamicItemNames());
-        state.put("itemNames", itemNames);
+
+        Map<String, Map<String, String>> dynamicItemMap = new LinkedHashMap<>();
+        session.getDynamicItemNames().forEach((id, name) -> {
+            Map<String, String> detail = new LinkedHashMap<>();
+            detail.put("name", name);
+            detail.put("type", "DYNAMIC");
+            detail.put("description", "");
+            dynamicItemMap.put(id, detail);
+        });
+
+        List<Map<String, String>> backpack = new ArrayList<>();
+        List<Map<String, String>> clues = new ArrayList<>();
+        for (String itemId : p.getInventory()) {
+            Map<String, String> entry = new LinkedHashMap<>();
+            if (presetItemMap.containsKey(itemId)) {
+                entry.put("id", itemId);
+                entry.put("name", presetItemMap.get(itemId).get("name"));
+                entry.put("type", presetItemMap.get(itemId).get("type"));
+                entry.put("description", presetItemMap.get(itemId).get("description"));
+                backpack.add(entry);
+            } else if (dynamicItemMap.containsKey(itemId)) {
+                entry.put("id", itemId);
+                entry.put("name", dynamicItemMap.get(itemId).get("name"));
+                entry.put("type", dynamicItemMap.get(itemId).get("type"));
+                entry.put("description", dynamicItemMap.get(itemId).get("description"));
+                clues.add(entry);
+            } else {
+                String fallbackName = session.getDynamicItemName(itemId);
+                entry.put("id", itemId);
+                entry.put("name", fallbackName != null ? fallbackName : itemId);
+                entry.put("type", "DYNAMIC");
+                entry.put("description", "");
+                clues.add(entry);
+            }
+        }
+        state.put("backpack", backpack);
+        state.put("clues", clues);
 
         Map<String, String> npcNames = new LinkedHashMap<>();
         for (NpcConfig npc : dataLoader.getNpcs()) {

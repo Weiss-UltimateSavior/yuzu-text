@@ -28,7 +28,7 @@
   "sanityWarningThresholds": [60, 30, 10],
   "stageReportInterval": 10,
   "fallbackPuzzleActivationTurns": 5,
-  "autoPickupLimit": 2,
+  "autoPickupLimit": 1,
   "archiveMapId": "map_archive_10f",
   "archiveRevelationBonus": 3,
   "explorationRevelationBonus": 1,

@@ -63,6 +63,14 @@ public class PuzzleAI {
     private String buildPrompt(GameSession session, PuzzleConfig puzzle, MapConfig currentMap) {
         StringBuilder sb = new StringBuilder(puzzle.getSystemPrompt());
 
+        if (currentMap.getAreas() != null && !currentMap.getAreas().isEmpty()) {
+            sb.append("\n\n=== 区域（与地图AI一致） ===\n");
+            int idx = 1;
+            for (Map<String, String> area : currentMap.getAreas()) {
+                sb.append(idx++).append(". ").append(area.get("name")).append("：").append(area.get("description")).append("\n");
+            }
+        }
+
         String stateHeader = prompts().getStateHeader()
                 .replace("{puzzleName}", puzzle.getName())
                 .replace("{difficulty}", String.valueOf(puzzle.getDifficulty()))
@@ -74,11 +82,24 @@ public class PuzzleAI {
                 .replace("{failNarrative}", puzzle.getFailNarrative());
         sb.append("\n\n").append(stateHeader).append("\n");
 
-        if (puzzle.getRequiredItemId() != null) { // 需要特定物品才能解谜
+        if (session.getCurrentArea() != null) {
+            sb.append("玩家当前所在区域: ").append(session.getCurrentArea()).append("\n");
+            sb.append("!!! 重要：玩家当前已经在「").append(session.getCurrentArea()).append("」区域，你的叙事必须从该区域开始，不要让玩家回到起点或之前的区域！\n");
+        }
+
+        if (puzzle.getRequiredItemId() != null) {
             String itemStatus = prompts().getRequiredItemTemplate()
                     .replace("{itemId}", puzzle.getRequiredItemId())
                     .replace("{status}", session.getPlayer().hasItem(puzzle.getRequiredItemId()) ? prompts().getOwnedLabel() : prompts().getMissingLabel());
             sb.append(itemStatus).append("\n");
+        }
+
+        if (!session.getPlayer().getInventory().isEmpty()) {
+            sb.append("\n玩家持有的物品:\n");
+            for (String itemId : session.getPlayer().getInventory()) {
+                String displayName = resolveItemName(session, itemId);
+                sb.append("- ").append(itemId).append(displayName.equals(itemId) ? "" : "(" + displayName + ")").append("\n");
+            }
         }
 
         sb.append("\n").append(prompts().getTurnAndSanityTemplate()
@@ -112,17 +133,26 @@ public class PuzzleAI {
         List<String> stillLocked = new ArrayList<>(currentMap.getNpcIds());
         stillLocked.removeAll(session.getUnlockedNpcs());
         stillLocked.removeAll(session.getKilledNpcs());
-        if (!stillLocked.isEmpty()) { // 未解锁NPC：谜题解决时可一并解锁
+        if (!stillLocked.isEmpty()) {
             String npcUnlock = prompts().getNpcUnlockSection();
             StringBuilder npcList = new StringBuilder();
             for (String id : stillLocked) {
-                npcList.append(id).append(" ");
+                NpcConfig npcCfg = dataLoader.getNpc(id);
+                if (npcCfg != null) {
+                    npcList.append(id).append("(").append(npcCfg.getName()).append(") ");
+                } else {
+                    npcList.append(id).append(" ");
+                }
             }
             sb.append("\n\n").append(npcUnlock.replace("{npcList}", npcList.toString().trim())).append("\n");
         }
 
         sb.append("\n\n").append(prompts().getCtrlTagExample()
                 .replace("{puzzleId}", puzzle.getId())).append("\n");
+
+        if (puzzle.getRequiredItemId() != null) {
+            sb.append("\n\n有前置物品的解谜成功示例（必须同时消耗物品）：\n<ctrl>\nPUZZLE:SOLVE:").append(puzzle.getId()).append("\nITEM:TAKE:").append(puzzle.getRequiredItemId()).append("\nREVELATION:+5\n</ctrl>\n");
+        }
 
         if (!stillLocked.isEmpty()) { // 附带NPC解锁的示例
             sb.append("\n\n").append(prompts().getSolveWithNpcExample()
@@ -131,5 +161,12 @@ public class PuzzleAI {
         }
 
         return sb.toString();
+    }
+
+    private String resolveItemName(GameSession session, String itemId) {
+        String dynamicName = session.getDynamicItemName(itemId);
+        if (dynamicName != null) return dynamicName;
+        ItemConfig item = dataLoader.getItem(itemId);
+        return item != null ? item.getName() : itemId;
     }
 }

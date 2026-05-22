@@ -39,6 +39,7 @@ public class GameSession {
     private boolean mapAutoTriggered = false;
     private boolean exitUnlocked = false;
     private int mapEntryTurn = 0;
+    private String currentArea;
 
     private Set<String> solvedPuzzles = new HashSet<>();
     private Set<String> failedPuzzles = new HashSet<>();
@@ -91,6 +92,9 @@ public class GameSession {
     public int getMapEntryTurn() { return mapEntryTurn; }
     public void setMapEntryTurn(int mapEntryTurn) { this.mapEntryTurn = mapEntryTurn; }
     public int getMapTurns() { return turn - mapEntryTurn; }
+
+    public String getCurrentArea() { return currentArea; }
+    public void setCurrentArea(String currentArea) { this.currentArea = currentArea; }
 
     public Set<String> getSolvedPuzzles() { return solvedPuzzles; }
     public boolean isPuzzleSolved(String puzzleId) { return solvedPuzzles.contains(puzzleId); }

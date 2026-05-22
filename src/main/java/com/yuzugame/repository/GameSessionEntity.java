@@ -42,6 +42,9 @@ public class GameSessionEntity {
 
     private int mapEntryTurn;
 
+    @Column(length = 64)
+    private String currentArea;
+
     @Convert(converter = SetConverter.class)
     @Column(columnDefinition = "JSON")
     private Set<String> solvedPuzzles;
@@ -117,6 +120,7 @@ public class GameSessionEntity {
         e.mapAutoTriggered = session.isMapAutoTriggered();
         e.exitUnlocked = session.isExitUnlocked();
         e.mapEntryTurn = session.getMapEntryTurn();
+        e.currentArea = session.getCurrentArea();
         e.solvedPuzzles = session.getSolvedPuzzles();
         e.failedPuzzles = session.getFailedPuzzles();
         e.unlockedNpcs = session.getUnlockedNpcs();
@@ -149,6 +153,7 @@ public class GameSessionEntity {
         s.setMapAutoTriggered(mapAutoTriggered);
         s.setExitUnlocked(exitUnlocked);
         s.setMapEntryTurn(mapEntryTurn);
+        s.setCurrentArea(currentArea);
         s.getSolvedPuzzles().addAll(solvedPuzzles != null ? solvedPuzzles : Set.of());
         s.getFailedPuzzles().addAll(failedPuzzles != null ? failedPuzzles : Set.of());
         s.getUnlockedNpcs().addAll(unlockedNpcs != null ? unlockedNpcs : Set.of());

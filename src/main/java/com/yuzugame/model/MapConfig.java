@@ -1,6 +1,7 @@
 package com.yuzugame.model;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 地图配置 —— 定义游戏中的每个可探索场景。
@@ -33,6 +34,7 @@ public class MapConfig {
     private List<String> npcIds;
     private String exitHint;
     private String systemPrompt;
+    private List<Map<String, String>> areas;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -62,4 +64,6 @@ public class MapConfig {
     public void setExitHint(String exitHint) { this.exitHint = exitHint; }
     public String getSystemPrompt() { return systemPrompt; }
     public void setSystemPrompt(String systemPrompt) { this.systemPrompt = systemPrompt; }
+    public List<Map<String, String>> getAreas() { return areas; }
+    public void setAreas(List<Map<String, String>> areas) { this.areas = areas; }
 }

@@ -128,6 +128,14 @@ public class ProtagonistAI {
             sb.append("\n");
         }
 
+        if (!session.getYuzuInventory().isEmpty()) { // 柚子持有的物品
+            sb.append("你持有的物品: ");
+            for (String itemId : session.getYuzuInventory()) {
+                sb.append(itemId).append(" ");
+            }
+            sb.append("\n");
+        }
+
         sb.append(prompts().getFoundItemsLabel()).append(" ");
         for (String itemId : session.getFoundItems()) {
             if (!session.getPlayer().hasItem(itemId)) { // 已发现但未拾取的物品

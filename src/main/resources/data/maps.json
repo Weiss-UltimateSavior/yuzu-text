@@ -6,14 +6,29 @@
     "chapterName": "管道之歌",
     "description": "千禧塔地下一层。黑暗、潮湿的管道网络，空气中弥漫着铁锈和不知名有机物的气味。远处管道的轰鸣声仿佛某种巨大的生物在地底深处呼吸。",
     "atmosphere": "幽闭、压抑，管道中回响着有规律的脉冲声——像心跳，又像某种信号。墙面的水渍在黑暗中呈现出不自然的形状，仿佛有什么东西正透过混凝土的孔隙向外窥视。",
-    "puzzles": ["puzzle_sewer_pipes"],
+    "puzzles": [
+      "puzzle_sewer_pipes"
+    ],
     "nextMapId": "map_millennium_1f",
     "locked": true,
     "unlockCondition": "puzzle:puzzle_sewer_pipes:success",
-    "items": ["item_pipe_sample", "item_frequency_recording", "item_cable_analysis"],
-    "npcIds": ["npc_maintenance", "npc_abyss_singer"],
+    "items": [
+      "item_pipe_sample",
+      "item_frequency_recording",
+      "item_cable_analysis"
+    ],
+    "npcIds": [
+      "npc_maintenance",
+      "npc_abyss_singer"
+    ],
     "exitHint": "管道尽头现出一道锈迹斑斑的阶梯，向上延伸至一片微弱的冷光中——那是千禧塔一层大厅的底层入口。",
-    "systemPrompt": "你是千禧塔下水道的环境叙事者。以洛夫克拉夫特式的恐怖风格，描述这片幽暗、潮湿的管道迷宫。强调管道中回响的脉冲声、墙壁上的异常痕迹、空气中令人不安的有机物气味。在管道深处有一道被铁链封锁的厚重铁门——那是通往塔上世界的唯一出口。管道交汇处偶尔能看到人类的踪迹：丢弃的工具、墙上的涂鸦、以及……某种比人类更大的东西留下的划痕。"
+    "systemPrompt": "你是千禧塔下水道的环境叙事者。以洛夫克拉夫特式的恐怖风格，描述这片幽暗、潮湿的管道迷宫。强调管道中回响的脉冲声、墙壁上的异常痕迹、空气中令人不安的有机物气味。在管道深处有一道被铁链封锁的厚重铁门——那是通往塔上世界的唯一出口。管道交汇处偶尔能看到人类的踪迹：丢弃的工具、墙上的涂鸦、以及……某种比人类更大的东西留下的划痕。",
+    "areas": [
+      {"name": "入口竖井", "description": "从地面进入下水道的铁梯和初始通道，空气潮湿，墙壁上有红色油漆的箭头和日期标记。地面上有拖拽痕迹，宽度约半米，边缘整齐。"},
+      {"name": "管道交汇厅", "description": "三条管道的分岔点，中央有一组被改装过的主控阀门，额外的铜线从阀门延伸到头顶管架。墙壁上有三条平行的爪痕，间距精确到毫米级。"},
+      {"name": "潮湿支管", "description": "狭窄的侧向管道，地面有积水，墙壁上生长着发光苔藓——越靠近能量源越亮。管道深处有微弱的蓝绿色光芒闪烁。"},
+      {"name": "共鸣空腔", "description": "管道尽头的天然岩洞，被改造过。中央矗立一根粗壮的铜柱，表面缠绕发光苔藓和缆线，铜柱底部嵌着黑色晶体。脉冲声的源头就在这里。"}
+    ]
   },
   {
     "id": "map_millennium_1f",
@@ -22,14 +37,29 @@
     "chapterName": "暗夜前厅",
     "description": "千禧塔一楼大厅。宏伟的大理石地面在深夜空无一人，天花板上的水晶吊灯发出不稳定的闪烁。监控摄像头的光点在黑暗中像一双双不眨的眼睛。",
     "atmosphere": "空旷、不祥。大厅里弥漫着一种被持续注视的不安感。空气中残留着冷咖啡和臭氧的气味。墙上的电子公告栏滚动着没有规律的乱码，仿佛整个建筑的神经系统正在抽搐。",
-    "puzzles": ["puzzle_security_terminal"],
+    "puzzles": [
+      "puzzle_security_terminal"
+    ],
     "nextMapId": "map_data_center_5f",
     "locked": true,
     "unlockCondition": "puzzle:puzzle_security_terminal:success",
-    "items": ["item_guard_log", "item_signal_jammer", "item_student_note"],
-    "npcIds": ["npc_night_guard", "npc_lost_student"],
+    "items": [
+      "item_guard_log",
+      "item_signal_jammer",
+      "item_student_note"
+    ],
+    "npcIds": [
+      "npc_night_guard",
+      "npc_lost_student"
+    ],
     "exitHint": "大厅最深处的电梯门无声滑开，轿厢内壁的金属反光中映出一个不属于你的影子。电梯面板上，5楼的指示灯正在缓缓亮起。",
-    "systemPrompt": "你是千禧塔一楼大厅的环境叙事者。以洛夫克拉夫特式的恐怖风格描述深夜空旷的学院大厅。监控摄像头无处不在，电子设备故障频发。强调被'监视'的不安感——被什么东西监视着，不是人，也不是机器。大厅里立着一座巨大的千禧塔微缩模型，但你注意到模型地下部分的结构与官方公布的设计图完全不同。"
+    "systemPrompt": "你是千禧塔一楼大厅的环境叙事者。以洛夫克拉夫特式的恐怖风格描述深夜空旷的学院大厅。监控摄像头无处不在，电子设备故障频发。强调被'监视'的不安感——被什么东西监视着，不是人，也不是机器。大厅里立着一座巨大的千禧塔微缩模型，但你注意到模型地下部分的结构与官方公布的设计图完全不同。",
+    "areas": [
+      {"name": "大厅主区", "description": "空旷的大理石地面，天花板水晶吊灯不稳定地闪烁。电子公告栏滚动着无规律的乱码。空气中残留着冷咖啡和臭氧的气味。"},
+      {"name": "安保监控室", "description": "大厅侧面的狭小房间，墙上是密密麻麻的监控屏幕，中央有一台安保终端。终端屏幕被紫色的有机体像素集群覆盖，正常命令输入被阻断。"},
+      {"name": "微缩模型展台", "description": "大厅中央的千禧塔微缩模型，模型地下部分的结构与官方设计图完全不同——第九层以上还有空间。模型底座有暗格，里面藏着一把旧安保卡。"},
+      {"name": "电梯厅", "description": "大厅深处的电梯，轿厢内壁金属反光中映出不属于你的影子。5楼指示灯在缓缓亮起。"}
+    ]
   },
   {
     "id": "map_data_center_5f",
@@ -38,14 +68,32 @@
     "chapterName": "数据低语",
     "description": "千禧塔五楼——千年科学学院的数据中心。成排的服务器机架如墓碑般矗立，冷却风扇的嗡鸣夹杂着某种不合逻辑的频率。显示屏上不断闪过无人在键盘前输入的字符。",
     "atmosphere": "科技与疯狂的交界。服务器散发的热量在空气中形成扭曲的蜃楼。每台机器的硬盘灯都以一种令人不安的同步节奏闪烁。当你靠近某个机架时，你能透过金属外壳听到里面传来的——不是数据流动的声音，而是低语。",
-    "puzzles": ["puzzle_data_decrypt", "puzzle_server_room"],
+    "puzzles": [
+      "puzzle_data_decrypt",
+      "puzzle_server_room"
+    ],
     "nextMapId": "map_central_lab_9f",
     "locked": true,
     "unlockCondition": "puzzle:puzzle_data_decrypt:success|puzzle:puzzle_server_room:success",
-    "items": ["item_data_shard_1", "item_data_shard_2", "item_data_shard_3", "item_resonance_diagram", "item_transceiver"],
-    "npcIds": ["npc_data_echo", "npc_sysadmin"],
+    "items": [
+      "item_data_shard_1",
+      "item_data_shard_2",
+      "item_data_shard_3",
+      "item_resonance_diagram",
+      "item_transceiver"
+    ],
+    "npcIds": [
+      "npc_data_echo",
+      "npc_sysadmin"
+    ],
     "exitHint": "金属地板在脚下发出不祥的嗡鸣，随后一块隐蔽的升降平台从服务器阵列之间升起——直达九楼的专用货运通道。",
-    "systemPrompt": "你是千禧塔数据中心的环境叙事者。以洛夫克拉夫特式恐怖融合科技恐惧来描述这片服务器森林。强调数据的'活性'——它们不再是被动的存储，而是正在觉醒的意识。机架的排列方式暗示着某种非欧几里得几何的空间结构。冷却系统的嗡鸣中隐藏着可辨识的节拍。屏幕上偶尔闪过的字符片段组合起来，像是一种被数字化了的古老咒语。"
+    "systemPrompt": "你是千禧塔数据中心的环境叙事者。以洛夫克拉夫特式恐怖融合科技恐惧来描述这片服务器森林。强调数据的'活性'——它们不再是被动的存储，而是正在觉醒的意识。机架的排列方式暗示着某种非欧几里得几何的空间结构。冷却系统的嗡鸣中隐藏着可辨识的节拍。屏幕上偶尔闪过的字符片段组合起来，像是一种被数字化了的古老咒语。",
+    "areas": [
+      {"name": "服务器阵列区", "description": "成排的服务器机架如墓碑般矗立，冷却风扇嗡鸣夹杂着不合逻辑的频率。硬盘灯以令人不安的同步节奏闪烁。靠近某些机架时，能透过金属外壳听到低语而非数据流动声。"},
+      {"name": "中央控制台", "description": "服务器阵列中央的工作站，多块显示屏显示着加密文件的多层结构。每层解密都会触发嵌入式认知危害——抽象几何图形、悖论语句、攻击自我概念的意象。"},
+      {"name": "环形服务器房", "description": "独立房间，六台巨大主服务器(A-F)按环形排列。系统记录中存在第七台服务器(G)的能耗数据，但物理空间中找不到它。G的干扰从激活第三台服务器时开始。"},
+      {"name": "冷却通道", "description": "服务器之间的维护通道，金属地板下是冷却液管道。通道尽头有一块隐蔽的升降平台——直达九楼的专用货运通道。"}
+    ]
   },
   {
     "id": "map_central_lab_9f",
@@ -54,14 +102,30 @@
     "chapterName": "封印之间",
     "description": "千禧塔九楼——核心实验区。实验室中央矗立着一座巨大的密闭容器，内部充满了不透明的雾状物质。容器的封印符文正在缓慢地剥落，每剥落一个符号，整个房间的光线就会闪烁一次。",
     "atmosphere": "神圣与亵渎的混合。实验室的环境控制面板上，温度、气压、辐射——所有数值都超出了正常范围，但报警系统已被静音。空气中弥漫着臭氧和一种无法描述的、类似于活体组织的气息。地面上的图案不是画出来的——是从地板下面透上来的光。",
-    "puzzles": ["puzzle_lab_experiment"],
+    "puzzles": [
+      "puzzle_lab_experiment"
+    ],
     "nextMapId": "map_archive_10f",
     "locked": true,
     "unlockCondition": "puzzle:puzzle_lab_experiment:success",
-    "items": ["item_seal_shard", "item_forbidden_tome", "item_experiment_log", "item_coolant_injector"],
-    "npcIds": ["npc_experiment_zero", "npc_warden"],
+    "items": [
+      "item_seal_shard",
+      "item_forbidden_tome",
+      "item_experiment_log",
+      "item_coolant_injector"
+    ],
+    "npcIds": [
+      "npc_experiment_zero",
+      "npc_warden"
+    ],
     "exitHint": "实验室后方的墙壁裂开一道缝隙——不是被炸开的，而是像帷幕一般被某种力量缓缓拉开，露出一条通往最高层的黑色阶梯。",
-    "systemPrompt": "你是千禧塔中央实验室的环境叙事者。这是人类科学逾越自然界限的现场。描述密封容器中那个不可名状的存在——它不是怪物，而是一个正在被唤醒的更古老、更真实的'现实'。强调封印正在失效的紧迫感。实验台上散落着无法理解的实验记录和不该存在的生物样本。墙壁上的裂纹在扩散，从裂纹中透出不属于这个光谱的光。"
+    "systemPrompt": "你是千禧塔中央实验室的环境叙事者。这是人类科学逾越自然界限的现场。描述密封容器中那个不可名状的存在——它不是怪物，而是一个正在被唤醒的更古老、更真实的'现实'。强调封印正在失效的紧迫感。实验台上散落着无法理解的实验记录和不该存在的生物样本。墙壁上的裂纹在扩散，从裂纹中透出不属于这个光谱的光。",
+    "areas": [
+      {"name": "观测走廊", "description": "环绕中央容器的环形走廊，钢化玻璃观测窗上布满裂纹。走廊墙壁上贴满了手写的警告便签和频率读数记录。地面上的图案不是画出来的——是从地板下面透上来的光。"},
+      {"name": "密封容器区", "description": "实验室中央的巨大密闭容器，内部充满不透明雾状物质。容器表面的封印符文正在缓慢剥落，每剥落一个符号，整个房间光线就闪烁一次。容器中偶尔传来低沉的共振声。"},
+      {"name": "频率调制站", "description": "容器旁的精密频率调制设备，有两个调制环——幅度调制和频率调制。设备读数在封印频率附近不断波动。实验体零号会在频率接近正确值时发出干扰脉冲。"},
+      {"name": "实验记录区", "description": "散落的实验台和文件柜，表面覆盖着灰尘和干涸的化学试剂。记录中包含不该存在的生物样本描述和封印频率的原始数据。墙壁裂纹在扩散，从裂纹中透出不属于这个光谱的光。"}
+    ]
   },
   {
     "id": "map_archive_10f",
@@ -70,13 +134,26 @@
     "chapterName": "不可名状之真相",
     "description": "千禧塔十楼——不可能存在的楼层。在建筑蓝图上，千禧塔只有九层。然而档案馆确实在这里：一个由无尽书架构成的圆形空间，中心没有天花板，向上延伸至一片由星光和黑暗组成的深渊。",
     "atmosphere": "肃穆、终极。这里的空气厚重得几乎凝固，书架上的知识并非以书籍的形式存在——而是以光、以声音、以直接出现在意识中的概念。每一个'看到'真相的瞬间，你都能感觉到自己的理智被削去薄薄的一层。但你也同时理解了——为什么人类被禁止知道这一切。",
-    "puzzles": ["puzzle_archive_truth"],
+    "puzzles": [
+      "puzzle_archive_truth"
+    ],
     "nextMapId": null,
     "locked": true,
     "unlockCondition": "puzzle:puzzle_archive_truth:success",
-    "items": ["item_truth_crystal"],
-    "npcIds": ["npc_archivist", "npc_abyss_projection"],
+    "items": [
+      "item_truth_crystal"
+    ],
+    "npcIds": [
+      "npc_archivist",
+      "npc_abyss_projection"
+    ],
     "exitHint": "没有出口。当你直视中心的无底深渊足够长之后，你会意识到——它不在你上方，它在你的意识之中。唯一离开的方式是理解，或者毁灭。",
-    "systemPrompt": "你是千禧塔档案馆的环境叙事者。这是真相的最深处。描述这个不可能存在于现实空间中的图书馆——它不是物理结构，而是更高维度存在的意识投影。书架上的知识是直接'写入'感知的，绕过语言和视觉。中心的深渊既是向上也是向内的。空气中有微弱的光尘在缓慢飘浮，每一粒光尘中都包含着人类无法承受的真相。"
+    "systemPrompt": "你是千禧塔档案馆的环境叙事者。这是真相的最深处。描述这个不可能存在于现实空间中的图书馆——它不是物理结构，而是更高维度存在的意识投影。书架上的知识是直接'写入'感知的，绕过语言和视觉。中心的深渊既是向上也是向内的。空气中有微弱的光尘在缓慢飘浮，每一粒光尘中都包含着人类无法承受的真相。",
+    "areas": [
+      {"name": "外环书架区", "description": "无尽书架构成的圆形空间，书架上的知识并非书籍形式——而是以光、以声音、以直接出现在意识中的概念存在。每一'看到'真相的瞬间，理智被削去薄薄一层。"},
+      {"name": "真理回廊", "description": "从外环通向中心的螺旋通道，两侧书架逐渐变矮，知识密度却指数级增长。通道中的空气厚重得几乎凝固，光尘越来越密集。"},
+      {"name": "深渊广场", "description": "中心的开放空间，没有天花板，向上延伸至一片由星光和黑暗组成的深渊。深渊投影悬浮在正上方——一个不可名状的存在正在注视着你。"},
+      {"name": "抉择之台", "description": "深渊投影正下方的一块圆形平台，地面刻满了古老的符文。真理水晶在此处会产生强烈共振——这是最终抉择之处。"}
+    ]
   }
 ]

@@ -6,9 +6,9 @@ spring:
     name: yuzu-game
 
   datasource:
-    url: jdbc:mysql://localhost/yuzu?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
-    username: your_username
-    password: yuzu_password
+    url: jdbc:mysql://yuzu/yuzu?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
+    username: yuzu
+    password: your_password_password
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -21,19 +21,23 @@ spring:
 
   data:
     redis:
-      host: your_redis_host_ip
+      host: your_password_password
       port: 6379
-      password: your_redis_password
+      password: your_password_password
       timeout: 5000ms
 
 yuzu:
+  data-dir: src/main/resources/data
+  admin:
+    username: yuzu
+    password: yuzu2026
   llm:
     base-url: https://api.deepseek.com/v1
-    api-key: your_api_key
+    api-key: your_password_password
     model: deepseek-v4-flash
   audit-llm:
     base-url: https://api.moonshot.cn/v1
-    api-key: your_api_key
+    api-key: your_password_password
     model: kimi-k2.5
 
 logging:

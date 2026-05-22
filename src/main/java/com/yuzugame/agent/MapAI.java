@@ -110,11 +110,23 @@ public class MapAI {
 
     private String buildPrompt(GameSession session, MapConfig currentMap) {
         StringBuilder sb = new StringBuilder(currentMap.getSystemPrompt());
+
+        if (currentMap.getAreas() != null && !currentMap.getAreas().isEmpty()) {
+            sb.append("\n\n=== 区域划分 ===\n");
+            int idx = 1;
+            for (Map<String, String> area : currentMap.getAreas()) {
+                sb.append(idx++).append(". ").append(area.get("name")).append("：").append(area.get("description")).append("\n");
+            }
+        }
+
         sb.append("\n\n=== 场景状态 ===\n");
         sb.append("地图: ").append(currentMap.getName()).append("\n");
         sb.append("章节: ").append(currentMap.getChapterName()).append("\n");
         sb.append("气氛: ").append(currentMap.getAtmosphere()).append("\n");
         sb.append("当前回合: ").append(session.getTurn()).append(" (本地图内: ").append(session.getMapTurns()).append(")\n");
+        if (session.getCurrentArea() != null) {
+            sb.append("玩家当前位置: ").append(session.getCurrentArea()).append("\n");
+        }
         int foundInMap = (int) currentMap.getItems().stream().filter(session::isItemFound).count();
         int totalInMap = currentMap.getItems().size();
         sb.append("已发现物品: ").append(foundInMap).append("/").append(totalInMap).append("\n");
@@ -136,12 +148,17 @@ public class MapAI {
         stillLocked.removeAll(session.getUnlockedNpcs());
         stillLocked.removeAll(session.getKilledNpcs());
 
-        if (!stillLocked.isEmpty()) { // 未解锁NPC：通过环境描写引导发现，不直接用NPC:UNLOCK
-            sb.append("场景中可能遭遇的NPC（通过环境描写引导玩家发现，不要使用NPC:UNLOCK标签）: ");
+        if (!stillLocked.isEmpty()) {
+            sb.append("场景中存在尚未现身的NPC（仅作为你环境描写的隐晦暗示参考，禁止在描写中直接提及NPC名称、外观或具体行为）:\n");
             for (String id : stillLocked) {
-                sb.append(id).append(" ");
+                NpcConfig npcCfg = dataLoader.getNpc(id);
+                if (npcCfg != null) {
+                    sb.append("- ").append(id).append("(").append(npcCfg.getName()).append(")\n");
+                } else {
+                    sb.append("- ").append(id).append("\n");
+                }
             }
-            sb.append("\n");
+            sb.append("暗示方式：用氛围描写暗示「有人/什么东西在场」，如「暗处有什么东西在跟踪你」「阴影中有视线在窥视」「身后传来刻意压低的脚步声」「某个角落的空气似乎比别处更冷」。绝对不要写出NPC的名字、身份或具体动作。\n");
         }
 
         List<String> remainingItems = new ArrayList<>(currentMap.getItems());
