@@ -1,5 +1,6 @@
 package com.yuzugame.engine;
 
+import com.yuzugame.model.GameConfig;
 import com.yuzugame.model.GameSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +30,16 @@ import java.util.regex.Pattern;
 public class GameStateManager {
 
     private static final Logger log = LoggerFactory.getLogger(GameStateManager.class);
+
+    private final GameDataLoader dataLoader;
+
+    public GameStateManager(GameDataLoader dataLoader) {
+        this.dataLoader = dataLoader;
+    }
+
+    private GameConfig gameConfig() {
+        return dataLoader.getGameConfig();
+    }
 
     /** 匹配 <ctrl>...</ctrl> 块中的控制标签 */
     private static final Pattern CTRL_BLOCK = Pattern.compile("<ctrl>(.*?)</ctrl>", Pattern.DOTALL);
@@ -337,8 +348,15 @@ public class GameStateManager {
     private String handleNpc(GameSession session, String action, String param) {
         return switch (action) {
             case "UNLOCK" -> {
+                boolean firstUnlock = !session.isNpcUnlocked(param);
                 session.unlockNpc(param);
-                log.debug("NPC unlocked: {}", param);
+                if (firstUnlock) {
+                    int reward = gameConfig().getNpcUnlockSanityReward();
+                    session.getPlayer().addSanity(reward);
+                    log.debug("NPC unlocked (first time): {}, sanity +{} -> now {}", param, reward, session.getPlayer().getSanity());
+                } else {
+                    log.debug("NPC unlocked (already): {}", param);
+                }
                 yield null;
             }
             case "KILL" -> {

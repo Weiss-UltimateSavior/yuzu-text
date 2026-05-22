@@ -244,12 +244,11 @@ public class GameEngine {
             if (npc == null) {
                 outputs.add(outputPrefix("hint") + "迷雾尚未揭露。");
             } else {
-                // NPC自动解锁：当出现条件满足时自动解锁，并给予理智+15奖励（首次建立联系的鼓励）
                 if (!session.isNpcUnlocked(npc.getId())) {
                     if (evaluator.evaluateOr(session, npc.getAppearCondition())) {
                         session.unlockNpc(npc.getId());
                         session.getPlayer().addSanity(gameConfig().getNpcUnlockSanityReward());
-                        log.debug("Auto-unlocked NPC {} (appearCondition met), sanity +15 -> now {}", npc.getId(), session.getPlayer().getSanity());
+                        log.debug("Auto-unlocked NPC {} (appearCondition met), sanity +{} -> now {}", npc.getId(), gameConfig().getNpcUnlockSanityReward(), session.getPlayer().getSanity());
                     } else {
                         outputs.add(outputPrefix("hint") + npc.getDialogueHint());
                     }

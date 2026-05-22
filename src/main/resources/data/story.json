@@ -40,7 +40,7 @@
   "maxTurns": 100,
   "sanityDecayCurve": [
     {"fromTurn": 1, "toTurn": 29, "decayPerTurn": 1},
-    {"fromTurn": 30, "toTurn": 59, "decayPerTurn": 2},
+    {"fromTurn": 30, "toTurn": 59, "decayPerTurn": 1},
     {"fromTurn": 60, "toTurn": 99, "decayPerTurn": 3}
   ]
 }
