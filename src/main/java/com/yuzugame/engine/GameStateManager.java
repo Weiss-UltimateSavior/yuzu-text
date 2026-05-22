@@ -221,7 +221,7 @@ public class GameStateManager {
                 case "REVELATION" -> handleRevelation(session, action);
                 case "AFFECTION" -> handleAffection(session, action);
                 case "NPC_AFFECTION" -> handleNpcAffection(session, action, param);
-                case "ITEM" -> handleItem(session, action, param);
+                case "ITEM" -> handleItem(session, action, param, agent);
                 case "NPC" -> handleNpc(session, action, param);
                 case "PUZZLE" -> handlePuzzle(session, action, param);
                 case "MAP" -> handleMap(session, action);
@@ -286,7 +286,7 @@ public class GameStateManager {
      *
      * <p>物品ID命名规范：{@code item_{来源}_{用途}}，如 {@code item_maintenance_gift}、{@code item_pipe_sample}。</p>
      */
-    private String handleItem(GameSession session, String action, String param) {
+    private String handleItem(GameSession session, String action, String param, AgentType agent) {
         return switch (action) {
             case "GIVE" -> {
                 String[] giveParts = param.split(":", 2);
@@ -296,12 +296,22 @@ public class GameStateManager {
                     log.warn("ITEM:GIVE tag missing Chinese name: ITEM:GIVE:{} — expected format ITEM:GIVE:id:中文名称", itemId);
                     itemName = itemId;
                 }
-                if (session.yuzuHasItem(itemId)) {
+                if (agent == AgentType.PROTAGONIST) {
+                    if (!session.yuzuHasItem(itemId)) {
+                        log.warn("ProtagonistAI ITEM:GIVE rejected: Yuzu does not have item {} — use ITEM:CREATE first", itemId);
+                        yield null;
+                    }
                     session.removeYuzuItem(itemId);
+                } else {
+                    if (session.yuzuHasItem(itemId)) {
+                        session.removeYuzuItem(itemId);
+                    }
                 }
                 session.getPlayer().addItem(itemId);
-                session.registerDynamicItemName(itemId, itemName);
-                log.debug("Item given to player: {} ({})", itemId, itemName);
+                if (dataLoader.getItem(itemId) == null) {
+                    session.registerDynamicItemName(itemId, itemName);
+                }
+                log.debug("Item given to player: {} ({}) by {}", itemId, itemName, agent);
                 yield null;
             }
             case "FOUND" -> {
@@ -313,8 +323,11 @@ public class GameStateManager {
                     itemName = itemId;
                 }
                 session.foundItem(itemId);
-                session.registerDynamicItemName(itemId, itemName);
-                log.debug("Item found in scene: {} ({})", itemId, itemName);
+                session.getPlayer().addItem(itemId);
+                if (dataLoader.getItem(itemId) == null) {
+                    session.registerDynamicItemName(itemId, itemName);
+                }
+                log.debug("Item found and picked up: {} ({})", itemId, itemName);
                 yield null;
             }
             case "TAKE" -> {
