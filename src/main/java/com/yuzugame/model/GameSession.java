@@ -1,5 +1,7 @@
 package com.yuzugame.model;
 
+import com.yuzugame.util.CodeUtils;
+
 import java.util.*;
 
 /**
@@ -60,6 +62,8 @@ public class GameSession {
     private String endingType;
 
     private Map<String, Integer> usedRedemptionCodes = new HashMap<>();
+
+    private Map<String, List<PuzzleMemoryEntry>> puzzleMemory = new HashMap<>();
 
     public String getSessionId() { return sessionId; }
     public void setSessionId(String sessionId) { this.sessionId = sessionId; }
@@ -169,13 +173,33 @@ public class GameSession {
     public void recordRedemptionCodeUse(String code) { usedRedemptionCodes.merge(normalizeCode(code), 1, Integer::sum); }
 
     private static String normalizeCode(String code) {
-        if (code == null) return null;
-        StringBuilder sb = new StringBuilder(code.length());
-        for (char c : code.toCharArray()) {
-            if (c >= 'a' && c <= 'z') sb.append((char) (c - 32));
-            else sb.append(c);
+        return CodeUtils.normalizeCode(code);
+    }
+
+    public Map<String, List<PuzzleMemoryEntry>> getPuzzleMemory() { return puzzleMemory; }
+    public void setPuzzleMemory(Map<String, List<PuzzleMemoryEntry>> puzzleMemory) { this.puzzleMemory = puzzleMemory; }
+
+    public List<PuzzleMemoryEntry> getPuzzleMemoryEntries(String puzzleId) {
+        return puzzleMemory.getOrDefault(puzzleId, List.of());
+    }
+
+    public void addPuzzleMemoryEntry(String puzzleId, PuzzleMemoryEntry entry) {
+        puzzleMemory.computeIfAbsent(puzzleId, k -> new ArrayList<>()).add(entry);
+    }
+
+    public void truncatePuzzleMemory(String puzzleId, int maxRounds) {
+        List<PuzzleMemoryEntry> entries = puzzleMemory.get(puzzleId);
+        if (entries != null && entries.size() > maxRounds * 2) {
+            puzzleMemory.put(puzzleId, new ArrayList<>(entries.subList(entries.size() - maxRounds * 2, entries.size())));
         }
-        return sb.toString();
+    }
+
+    public void clearPuzzleMemory(String puzzleId) {
+        puzzleMemory.remove(puzzleId);
+    }
+
+    public void clearAllPuzzleMemory() {
+        puzzleMemory.clear();
     }
 
     /**

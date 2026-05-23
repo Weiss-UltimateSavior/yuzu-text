@@ -39,7 +39,8 @@
     "id": "item_sedative",
     "name": "镇定剂",
     "type": "CONSUMABLE",
-    "description": "千年科学学院医务室的标准配给。标签上写着'适用于轻度认知混乱及急性焦虑发作'。柚子把它塞进你手里时，手微微发抖。"
+    "description": "千年科学学院医务室的标准配给。标签上写着'适用于轻度认知混乱及急性焦虑发作'。柚子把它塞进你手里时，手微微发抖。",
+    "sanityRecovery": 20
   },
   {
     "id": "item_coolant_injector",

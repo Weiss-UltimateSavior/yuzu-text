@@ -134,15 +134,18 @@ public class NpcAI {
         sb.append("\n").append(prompts().getReplyRules()).append("\n");
 
         int dialogueCount = session.getNpcDialogueCount(npc.getId());
-        int giftThreshold = gameConfig().getNpcGiftDialogueThreshold(); // 第N次对话自动给道具
-        if (dialogueCount == giftThreshold - 1) { // 下次对话将触发赠礼
+        int giftThreshold = gameConfig().getNpcGiftDialogueThreshold();
+        String giftItemId = gameConfig().getNpcGiftItemIdTemplate().replace("{npcId}", npc.getId());
+        boolean playerHasGift = session.getPlayer().hasItem(giftItemId);
+
+        if (playerHasGift) {
+            sb.append("\n").append(prompts().getAlreadyGiftedRule()).append("\n");
+        } else if (dialogueCount >= giftThreshold - 1) {
             String giftRule = prompts().getThirdDialogueGiftRule()
                     .replace("{npcId}", npc.getId())
                     .replace("{itemIdTemplate}", gameConfig().getNpcGiftItemIdTemplate())
                     .replace("{nameTemplate}", gameConfig().getNpcGiftNameTemplate());
             sb.append("\n").append(giftRule).append("\n");
-        } else if (dialogueCount >= giftThreshold) { // 已赠礼
-            sb.append("\n").append(prompts().getAlreadyGiftedRule()).append("\n");
         }
 
         sb.append("\n").append(prompts().getCriticalRules()).append("\n");

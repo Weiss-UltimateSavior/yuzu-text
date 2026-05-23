@@ -2,6 +2,7 @@ package com.yuzugame.repository;
 
 import com.yuzugame.model.GameSession;
 import com.yuzugame.model.Player;
+import com.yuzugame.model.PuzzleMemoryEntry;
 import com.yuzugame.repository.JsonConverters.*;
 import jakarta.persistence.*;
 
@@ -93,6 +94,10 @@ public class GameSessionEntity {
     @Column(columnDefinition = "JSON")
     private Map<String, Integer> usedRedemptionCodes;
 
+    @Convert(converter = PuzzleMemoryConverter.class)
+    @Column(columnDefinition = "JSON")
+    private Map<String, List<PuzzleMemoryEntry>> puzzleMemory;
+
     @Convert(converter = ChatHistoryConverter.class)
     @Column(columnDefinition = "JSON")
     private List<GameSession.ChatMessage> chatHistory;
@@ -133,6 +138,7 @@ public class GameSessionEntity {
         e.npcDialogueCounts = session.getNpcDialogueCounts();
         e.dynamicItemNames = session.getDynamicItemNames();
         e.usedRedemptionCodes = session.getUsedRedemptionCodes();
+        e.puzzleMemory = session.getPuzzleMemory();
         e.chatHistory = session.getChatHistory();
         e.ended = session.isEnded();
         e.endingType = session.getEndingType();
@@ -166,6 +172,7 @@ public class GameSessionEntity {
         if (npcDialogueCounts != null) s.getNpcDialogueCounts().putAll(npcDialogueCounts);
         if (dynamicItemNames != null) s.getDynamicItemNames().putAll(dynamicItemNames);
         if (usedRedemptionCodes != null) s.getUsedRedemptionCodes().putAll(usedRedemptionCodes);
+        if (puzzleMemory != null) s.getPuzzleMemory().putAll(puzzleMemory);
         if (chatHistory != null) s.getChatHistory().addAll(chatHistory);
         s.setEnded(ended);
         s.setEndingType(endingType);

@@ -103,4 +103,17 @@ public class JsonConverters {
             catch (JsonProcessingException e) { return Map.of(); }
         }
     }
+
+    public static class PuzzleMemoryConverter implements AttributeConverter<Map<String, List<com.yuzugame.model.PuzzleMemoryEntry>>, String> {
+        @Override
+        public String convertToDatabaseColumn(Map<String, List<com.yuzugame.model.PuzzleMemoryEntry>> attribute) {
+            try { return attribute == null ? "{}" : OM.writeValueAsString(attribute); }
+            catch (JsonProcessingException e) { return "{}"; }
+        }
+        @Override
+        public Map<String, List<com.yuzugame.model.PuzzleMemoryEntry>> convertToEntityAttribute(String dbData) {
+            try { return dbData == null || dbData.isBlank() ? Map.of() : OM.readValue(dbData, new TypeReference<Map<String, List<com.yuzugame.model.PuzzleMemoryEntry>>>() {}); }
+            catch (JsonProcessingException e) { return Map.of(); }
+        }
+    }
 }

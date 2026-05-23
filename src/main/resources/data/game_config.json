@@ -1,6 +1,6 @@
 {
   "exploreKeywords": "观察|看看|周围|环境|探索|调查|检查|触碰|操作|启动|破解|查看|搜寻|翻找|审视|打量|深入|走去|走向|靠近|接近|进入",
-  "moveKeywords": "前进|移动|离开|前往|上去|下楼|上楼|进入|出发|通过|穿过|迈向|踏上|去往",
+  "moveKeywords": "离开|前进",
   "npcMentionPattern": "@(\\S+)\\s+(.+)",
   "outputPrefixes": {
     "environment": "【环境】",
@@ -50,7 +50,7 @@
   "npcGiftItemIdTemplate": "item_{npcId}_gift",
   "npcGiftNameTemplate": "{npcName}的赠礼",
   "npcGiftDialogueThreshold": 2,
-  "puzzleMinRoundsBase": 2,
+  "puzzleMinRoundsBase": 3,
   "maxPuzzleMemoryRounds": 20,
   "mapAiHistoryLimit": 30,
   "npcAiHistoryLimit": 30,

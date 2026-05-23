@@ -3,6 +3,7 @@ package com.yuzugame.engine;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yuzugame.model.*;
+import com.yuzugame.util.CodeUtils;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,13 +40,7 @@ public class GameDataLoader {
     private List<NpcConfig> npcList = new ArrayList<>();
 
     static String normalizeCode(String code) {
-        if (code == null) return null;
-        StringBuilder sb = new StringBuilder(code.length());
-        for (char c : code.toCharArray()) {
-            if (c >= 'a' && c <= 'z') sb.append((char) (c - 32));
-            else sb.append(c);
-        }
-        return sb.toString();
+        return CodeUtils.normalizeCode(code);
     }
 
     public String getDataDir() { return dataDir; }

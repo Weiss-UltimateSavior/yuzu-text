@@ -55,34 +55,6 @@ public class DirectorAI {
         return llm.chat(prompt, template);
     }
 
-    public String checkMapTransition(GameSession session, MapConfig currentMap, StoryConfig story) {
-        String prompt = buildPrompt(session, currentMap, story);
-
-        boolean anyPuzzleSolved = currentMap.getPuzzles() != null &&
-                currentMap.getPuzzles().stream().anyMatch(session::isPuzzleSolved);
-        boolean anyPuzzleFailed = currentMap.getPuzzles() != null &&
-                currentMap.getPuzzles().stream().anyMatch(p -> session.getFailedPuzzles().contains(p));
-
-        StringBuilder context = new StringBuilder();
-        context.append(String.format("第%d回合，检查是否应切换地图。\n", session.getTurn()));
-        context.append(String.format("当前地图：%s (%s)\n", currentMap.getName(), currentMap.getId()));
-        context.append(String.format("下一地图：%s\n", currentMap.getNextMapId()));
-
-        if (anyPuzzleSolved) { // 谜题已解 → 提示导演可切换地图
-            context.append(prompts().getMapTransitionSolvedTemplate()
-                    .replace("{nextMapId}", currentMap.getNextMapId())).append("\n");
-        } else if (anyPuzzleFailed) { // 谜题失败但未解 → 允许强行推进但伴随惩罚
-            context.append(prompts().getMapTransitionFailedTemplate()
-                    .replace("{nextMapId}", currentMap.getNextMapId())).append("\n");
-        } else { // 谜题未完成 → 不切换
-            context.append(prompts().getMapTransitionUnsolvedTemplate()).append("\n");
-        }
-
-        context.append("\n").append(prompts().getMapTransitionSuffix());
-
-        return llm.chat(prompt, context.toString());
-    }
-
     public String ending(GameSession session, String endingType, StoryConfig story) {
         Player player = session.getPlayer();
         String narrativeHint = resolveNarrativeHint(endingType);

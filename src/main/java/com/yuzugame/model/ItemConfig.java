@@ -18,6 +18,7 @@ public class ItemConfig {
     private String name;
     private String type;
     private String description;
+    private Integer sanityRecovery;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -27,4 +28,6 @@ public class ItemConfig {
     public void setType(String type) { this.type = type; }
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+    public Integer getSanityRecovery() { return sanityRecovery; }
+    public void setSanityRecovery(Integer sanityRecovery) { this.sanityRecovery = sanityRecovery; }
 }

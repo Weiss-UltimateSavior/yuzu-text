@@ -142,13 +142,15 @@ public class GameEngine {
         ProtagonistConfig protagonistConfig = dataLoader.getProtagonist();
         List<String> outputs = new ArrayList<>();
 
+        Set<String> npcsUnlockedBefore = new HashSet<>(session.getUnlockedNpcs());
+
         // ---- 步骤1：回合计数与理智自然衰减 ----
         // 每回合开始时递增回合数，并根据衰减曲线扣除理智值
         session.incrementTurn();
         applySanityDecay(session, story);
 
         // ---- 步骤2：首次进入新地图时自动环境描写 ----
-        // mapAutoTriggered 由 GameStateManager.handleMap() 在 LLM 输出 MAP: 标签时设置
+        // mapAutoTriggered 由 GameStateManager.handleMap() 在地图切换时设置
         // 若玩家本轮输入含探索关键词，则跳过自动描写（Step4 会补上），避免重复
         if (session.isMapAutoTriggered()) {
             session.setMapAutoTriggered(false);
@@ -256,8 +258,6 @@ public class GameEngine {
                 if (session.isNpcUnlocked(npc.getId())) {
                     if (session.isNpcKilled(npc.getId()) && !session.isNpcRevived(npc.getId())) {
                         outputs.add(outputPrefix("hint") + npc.getName() + "已经不在了。");
-                    } else if (!evaluator.evaluateOr(session, npc.getAppearCondition())) {
-                        outputs.add(outputPrefix("hint") + npc.getName() + "不在这里，你需要在更深层的地方寻找。");
                     } else if (npc.getDialogueCondition() != null && !npc.getDialogueCondition().isBlank()
                             && !evaluator.evaluateOr(session, npc.getDialogueCondition())) {
                         outputs.add(outputPrefix("hint") + npc.getName() + "此刻不愿与你交谈。");
@@ -314,7 +314,7 @@ public class GameEngine {
                 //    5+  |  +11   |  +2
                 // 调整方式：修改下方 switch 表达式中的数值
                 if (session.isPuzzleSolved(puzzle.getId())) {
-                    puzzleAI.clearPuzzleMemory(session.getSessionId(), puzzle.getId());
+                    session.clearPuzzleMemory(puzzle.getId());
                     int revelationReward = gameConfig().getPuzzleRewards().getRevelationReward(puzzle.getDifficulty());
                     session.getPlayer().addRevelation(revelationReward);
                     int sanityReward = gameConfig().getPuzzleRewards().getSanityReward(puzzle.getDifficulty());
@@ -325,6 +325,12 @@ public class GameEngine {
                 }
             }
         }
+
+        // ---- 步骤7前：捕获地图切换前的状态基线 ----
+        // 必须在步骤7（DirectorAI）之前捕获，因为 DirectorAI 的控制标签
+        // 可能修改 session 状态，导致过渡描写基于错误的起始地图
+        String mapIdBeforeTransition = session.getCurrentMapId();
+        String chapterBeforeTransition = session.getCurrentChapter();
 
         // ---- 步骤7：每10回合导演阶段汇报 ----
         // 导演AI生成阶段性旁白，提供叙事节奏感，同时可输出控制标签
@@ -338,10 +344,24 @@ public class GameEngine {
             stateManager.applyControlTags(session, report, AgentType.DIRECTOR);
         }
 
+        // ---- 步骤7.5：NPC解锁通知 ----
+        // 统一检测本回合新增的解锁NPC，补充出场描写通知
+        // 适用于步骤5自动解锁和 NPC:UNLOCK 标签两条路径
+        Set<String> npcsUnlockedAfter = session.getUnlockedNpcs();
+        for (String npcId : npcsUnlockedAfter) {
+            if (!npcsUnlockedBefore.contains(npcId)) {
+                NpcConfig npcCfg = dataLoader.getNpc(npcId);
+                if (npcCfg != null) {
+                    outputs.add(outputPrefix("system") + npcCfg.getName() + "出现了 — " + npcCfg.getDescription());
+                    outputs.add(outputPrefix("system") + "理智 +" + gameConfig().getNpcUnlockSanityReward());
+                }
+            }
+        }
+
         // ---- 步骤8：出口解锁与地图切换 ----
-        // 流程：谜题解决/失败 → 出口解锁 → 玩家输入移动关键词 → 地图切换 + 过渡描写
-        // 地图切换后：重置出口状态、记录地图进入回合（用于 mapTurns 计算）、拾取新地图物品
-        String mapIdBeforeTransition = session.getCurrentMapId();
+        // 流程：谜题解决/失败 → 出口解锁 → 玩家输入"离开"/"前进" → 地图切换 + 过渡描写
+        // 地图切换统一通过 GameStateManager.handleMap() 执行状态重置，
+        // 过渡描写、章节奖励、物品拾取在末尾统一处理（两条路径共享）
 
         if (!session.isExitUnlocked() && shouldCheckMapTransition(session, currentMap)) {
             session.setExitUnlocked(true);
@@ -350,38 +370,22 @@ public class GameEngine {
 
         if (session.isExitUnlocked() && moveKeywords().matcher(playerMessage).find()
                 && currentMap.getNextMapId() != null && !currentMap.getNextMapId().isBlank()) {
-            String nextMapId = currentMap.getNextMapId();
-            MapConfig nextMap = dataLoader.getMap(nextMapId);
-            if (nextMap != null) {
-                session.setCurrentMapId(nextMapId);
-                session.setExitUnlocked(false);
-                session.setMapAutoTriggered(false);
-                session.setMapEntryTurn(session.getTurn());
-                session.setCurrentArea(null);
-
-                for (StoryConfig.ChapterDef ch : story.getChapters()) {
-                    if (ch.getMapId().equals(nextMapId)) {
-                        session.setCurrentChapter(ch.getId());
-                        break;
-                    }
-                }
-
-                // 章节推进揭露度奖励（进入新章节时一次性获得）：
-                //   ch2→+3, ch3→+5, ch4→+7, ch5→+10, 其他→+2
-                // 调整方式：修改下方 switch 表达式中的数值
-                int chapterReward = gameConfig().getChapterRevelationReward(nextMap.getChapter());
-                session.getPlayer().addRevelation(chapterReward);
-                log.debug("Chapter advancement revelation: +{} -> now {}", chapterReward, session.getPlayer().getRevelation());
-
-                currentMap = nextMap;
-            }
+            stateManager.handleMap(session, currentMap.getNextMapId());
         }
 
-        // 地图切换后：移除旧地图的环境描写，生成从旧地图到新地图的过渡描写
+        // 地图切换后统一处理：过渡描写 + 章节奖励 + 物品拾取
+        // 无论是 Step8 出口移动路径还是 MAP:mapId 标签路径，都在此统一执行
         if (!session.getCurrentMapId().equals(mapIdBeforeTransition)) {
+            currentMap = dataLoader.getMap(session.getCurrentMapId());
             outputs.removeIf(o -> o.startsWith(outputPrefix("environment")));
             MapConfig fromMap = dataLoader.getMap(mapIdBeforeTransition);
             if (currentMap != null) {
+                if (!currentMap.getChapter().equals(chapterBeforeTransition)) {
+                    int chapterReward = gameConfig().getChapterRevelationReward(currentMap.getChapter());
+                    session.getPlayer().addRevelation(chapterReward);
+                    log.debug("Chapter advancement revelation: +{} -> now {}", chapterReward, session.getPlayer().getRevelation());
+                }
+
                 String transitionDesc = (fromMap != null)
                         ? mapAI.transitionDescribe(session, fromMap, currentMap)
                         : mapAI.autoDescribe(session, currentMap);
@@ -399,9 +403,12 @@ public class GameEngine {
         // 当理智降至阈值以下时，导演AI生成内心独白，增强叙事紧迫感
         // 阈值调整：修改下方 thresholds 数组，如 {60, 30, 10} 表示理智≤60/≤30/≤10时各触发一次
         int sanity = session.getPlayer().getSanity();
+        boolean sanityWarningTriggered = false;
         for (int threshold : gameConfig().getSanityWarningThresholds()) {
+            sanity = session.getPlayer().getSanity();
             if (sanity <= threshold && !session.getTriggeredSanityWarnings().contains(threshold)) {
                 session.getTriggeredSanityWarnings().add(threshold);
+                sanityWarningTriggered = true;
                 String warning = director.sanityWarning(session, currentMap, story);
                 String warnStripped = stateManager.stripInternal(warning);
                 if (!warnStripped.isBlank()) {
@@ -410,6 +417,20 @@ public class GameEngine {
                 }
                 stateManager.applyControlTags(session, warning, AgentType.DIRECTOR);
             }
+        }
+
+        sanity = session.getPlayer().getSanity();
+        if (sanityWarningTriggered && session.yuzuHasItem("item_sedative") && sanity < 20 && session.getTurn() < 60) {
+            session.removeYuzuItem("item_sedative");
+            ItemConfig sedative = dataLoader.getItem("item_sedative");
+            int recovery = (sedative != null && sedative.getSanityRecovery() != null) ? sedative.getSanityRecovery() : 20;
+            session.getPlayer().addSanity(recovery);
+            sanity = session.getPlayer().getSanity();
+            String sedativeMsg = "（柚子注意到你的状态不太对……她果断从口袋里掏出镇定剂，稳稳地给你注射了进去）老师，深呼吸……会好起来的。";
+            outputs.add(outputPrefix("protagonist") + sedativeMsg);
+            outputs.add(outputPrefix("system") + "柚子为你使用了镇定剂，理智恢复+" + recovery);
+            session.addChatMessage(new GameSession.ChatMessage("PROTAGONIST_AI", null, sedativeMsg));
+            log.debug("Sedative auto-used: sanity +{} -> now {}", recovery, sanity);
         }
 
         // ---- 步骤10：结局判定 ----
@@ -435,6 +456,7 @@ public class GameEngine {
         session.setCurrentArea(null);
         session.setGamePhase("opening");
         session.setTurn(0);
+        session.addYuzuItem("item_sedative");
 
         MapConfig startMap = dataLoader.getMap(gameConfig().getStartingMapId());
         String opening = director.openingMonologue(story, startMap);
@@ -487,6 +509,14 @@ public class GameEngine {
     private boolean shouldCheckMapTransition(GameSession session, MapConfig currentMap) {
         if (currentMap.getNextMapId() == null || currentMap.getNextMapId().isBlank()) {
             return false;
+        }
+        String unlockCondition = currentMap.getUnlockCondition();
+        if (unlockCondition != null && !unlockCondition.isBlank()) {
+            if (evaluator.evaluateOr(session, unlockCondition)) {
+                return true;
+            }
+            String failCondition = unlockCondition.replace(":success", ":failed");
+            return evaluator.evaluateOr(session, failCondition);
         }
         boolean anyPuzzleSolved = currentMap.getPuzzles() != null &&
                 currentMap.getPuzzles().stream().anyMatch(session::isPuzzleSolved);
@@ -570,12 +600,12 @@ public class GameEngine {
 
         String yuzuEnding = protagonist.endingLine(session.getPlayer(), pConfig, endingType);
         String yuzuEndingStripped = stateManager.stripInternal(yuzuEnding);
-        outputs.add(outputPrefix("protagonistFinal") + yuzuEndingStripped);
+        outputs.add(outputPrefix("protagonistEnding") + yuzuEndingStripped);
 
         session.setEnded(true);
         session.setEndingType(endingType);
         stateManager.applyControlTags(session, ending, AgentType.DIRECTOR);
         // 清理该会话的所有谜题AI记忆
-        puzzleAI.clearSessionMemory(session.getSessionId());
+        session.clearAllPuzzleMemory();
     }
 }

@@ -2,6 +2,8 @@ package com.yuzugame.engine;
 
 import com.yuzugame.model.GameConfig;
 import com.yuzugame.model.GameSession;
+import com.yuzugame.model.ItemConfig;
+import com.yuzugame.model.PuzzleConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -179,7 +181,8 @@ public class GameStateManager {
                     default -> false;
                 };
                 case "PUZZLE" -> "ACTIVATE".equals(action);
-                case "MAP", "CHAPTER", "ENDING", "EVENT" -> true;
+                case "MAP", "CHAPTER" -> false;
+                case "ENDING", "EVENT" -> true;
                 default -> false;
             };
             case PUZZLE -> switch (category) {
@@ -341,8 +344,26 @@ public class GameStateManager {
                 yield null;
             }
             case "USE" -> {
+                if (!session.yuzuHasItem(param)) {
+                    log.warn("ITEM:USE rejected: Yuzu does not have item {}", param);
+                    yield null;
+                }
+                if ("item_sedative".equals(param) && session.getPlayer().getSanity() >= 20) {
+                    log.warn("ITEM:USE rejected: sedative can only be used when player sanity < 20, current sanity: {}", session.getPlayer().getSanity());
+                    yield null;
+                }
+                if ("item_sedative".equals(param) && session.getTurn() >= 60) {
+                    log.warn("ITEM:USE rejected: sedative can only be used before turn 60, current turn: {}", session.getTurn());
+                    yield null;
+                }
                 session.removeYuzuItem(param);
-                log.debug("Yuzu used item: {}", param);
+                ItemConfig usedItem = dataLoader.getItem(param);
+                if (usedItem != null && usedItem.getSanityRecovery() != null) {
+                    session.getPlayer().addSanity(usedItem.getSanityRecovery());
+                    log.debug("Item used by Yuzu: {} → sanity +{} -> now {}", param, usedItem.getSanityRecovery(), session.getPlayer().getSanity());
+                } else {
+                    log.debug("Yuzu used item: {}", param);
+                }
                 yield null;
             }
             default -> null;
@@ -416,29 +437,82 @@ public class GameStateManager {
                 yield null;
             }
             case "SOLVE" -> {
+                session.incrementPuzzleAttempts(param);
                 session.markPuzzleSolved(param);
                 session.setActivePuzzleId(null);
-                log.debug("Puzzle solved: {}", param);
+                log.debug("Puzzle solved: {} (attempts: {})", param, session.getPuzzleAttempts(param));
                 yield null;
             }
             case "FAIL" -> {
                 int attempts = session.incrementPuzzleAttempts(param);
-                session.markPuzzleFailed(param);
-                session.setActivePuzzleId(null);
-                log.debug("Puzzle failed at attempt {}: {}", attempts, param);
+                PuzzleConfig puzzleCfg = dataLoader.getPuzzle(param);
+                int maxAttempts = puzzleCfg != null ? puzzleCfg.getMaxAttempts() : 5;
+                if (attempts >= maxAttempts) {
+                    session.markPuzzleFailed(param);
+                    session.setActivePuzzleId(null);
+                    log.debug("Puzzle failed at attempt {}/{}: {} — max attempts reached", attempts, maxAttempts, param);
+                } else {
+                    log.debug("Puzzle attempt {}/{} failed: {} — puzzle remains active", attempts, maxAttempts, param);
+                }
                 yield null;
             }
             default -> null;
         };
     }
 
-    /** 处理 MAP:mapId 标签 —— 切换当前地图，并标记需要自动环境描写 */
-    private String handleMap(GameSession session, String mapId) {
+    /**
+     * 地图切换 —— 统一的状态重置入口。
+     *
+     * <p>无论是 Step8 出口+移动关键词路径，还是 MAP:mapId 标签路径，
+     * 所有地图切换的状态重置逻辑都通过此方法执行，确保两条路径行为一致。</p>
+     *
+     * <p>状态重置清单：
+     * <ul>
+     *   <li>currentMapId → 新地图ID</li>
+     *   <li>exitUnlocked → false</li>
+     *   <li>mapAutoTriggered → false（过渡描写由 GameEngine 统一生成）</li>
+     *   <li>mapEntryTurn → 当前回合</li>
+     *   <li>currentArea → null</li>
+     *   <li>activePuzzleId → null</li>
+     *   <li>currentChapter → 根据地图配置更新</li>
+     * </ul></p>
+     *
+     * @param session 当前游戏会话
+     * @param mapId 目标地图ID
+     * @return 切换成功返回 mapId，地图不存在返回 null
+     */
+    public String handleMap(GameSession session, String mapId) {
         mapId = mapId.trim().replaceAll("[^a-zA-Z0-9_]", "");
+        com.yuzugame.model.MapConfig mapConfig = dataLoader.getMap(mapId);
+        if (mapConfig == null) {
+            log.warn("Map transition rejected: mapId {} not found", mapId);
+            return null;
+        }
+
+        String oldMapId = session.getCurrentMapId();
+        com.yuzugame.model.MapConfig oldMapConfig = dataLoader.getMap(oldMapId);
+        if (oldMapConfig != null && oldMapConfig.getNextMapId() != null
+                && !oldMapConfig.getNextMapId().isBlank()
+                && !mapId.equals(oldMapConfig.getNextMapId())) {
+            log.warn("Map transition rejected: target {} is not the next map in sequence (expected {} from current map {})",
+                    mapId, oldMapConfig.getNextMapId(), oldMapId);
+            return null;
+        }
+
         session.setCurrentMapId(mapId);
-        session.setMapAutoTriggered(true);
-        log.debug("Map switched to: {}", mapId);
-        return null;
+        session.setExitUnlocked(false);
+        session.setMapAutoTriggered(false);
+        session.setMapEntryTurn(session.getTurn());
+        session.setCurrentArea(null);
+        session.setActivePuzzleId(null);
+
+        if (mapConfig.getChapter() != null) {
+            session.setCurrentChapter(mapConfig.getChapter());
+        }
+
+        log.debug("Map transitioned: {} -> {}, exit reset, area cleared, active puzzle cleared, chapter -> {}",
+                oldMapId, mapId, session.getCurrentChapter());
+        return mapId;
     }
 
     /** 处理 CHAPTER:chapterId 标签 —— 推进章节 */
@@ -454,6 +528,7 @@ public class GameStateManager {
         endingType = endingType.trim().replaceAll("[^a-zA-Z0-9_]", "");
         session.setEnded(true);
         session.setEndingType(endingType);
+        session.clearAllPuzzleMemory();
         log.debug("Ending triggered: {}", endingType);
         return null;
     }

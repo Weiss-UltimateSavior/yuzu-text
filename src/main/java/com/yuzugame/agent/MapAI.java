@@ -124,6 +124,7 @@ public class MapAI {
         sb.append("章节: ").append(currentMap.getChapterName()).append("\n");
         sb.append("气氛: ").append(currentMap.getAtmosphere()).append("\n");
         sb.append("当前回合: ").append(session.getTurn()).append(" (本地图内: ").append(session.getMapTurns()).append(")\n");
+        sb.append("玩家理智: ").append(session.getPlayer().getSanity()).append("/100\n");
         if (session.getCurrentArea() != null) {
             sb.append("玩家当前位置: ").append(session.getCurrentArea()).append("\n");
         }

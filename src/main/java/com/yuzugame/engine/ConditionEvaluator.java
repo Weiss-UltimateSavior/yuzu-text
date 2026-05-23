@@ -13,7 +13,8 @@ import org.springframework.stereotype.Component;
  *   <li>{@code item:id} — 玩家是否持有指定物品</li>
  *   <li>{@code revelation:N} — 揭露度是否≥N</li>
  *   <li>{@code turn:N} — 回合数是否≥N</li>
- *   <li>{@code affection:npcId:N} — NPC好感度是否≥N</li>
+ *   <li>{@code npcDialogue:npcId:N} — 与指定NPC的对话次数是否≥N</li>
+ *   <li>{@code affection:N} — 柚子好感度是否≥N</li>
  * </ul></p>
  *
  * <p>支持逻辑组合：
@@ -26,13 +27,6 @@ import org.springframework.stereotype.Component;
 @Component
 public class ConditionEvaluator {
 
-    /**
-     * 求值单个条件表达式（不含逻辑运算符）。
-     *
-     * @param session 当前游戏会话
-     * @param condition 条件字符串，格式为 "type:value" 或 "type:value:param"
-     * @return 条件是否满足；null 或空字符串视为无条件限制，返回 true
-     */
     public boolean evaluate(GameSession session, String condition) {
         if (condition == null || condition.isBlank()) {
             return true;
@@ -51,7 +45,8 @@ public class ConditionEvaluator {
             case "item" -> evaluateItem(session, value);
             case "revelation" -> evaluateRevelation(session, value);
             case "turn" -> evaluateTurn(session, value);
-            case "affection" -> evaluateNpcDialogueCount(session, value, param);
+            case "npcDialogue" -> evaluateNpcDialogueCount(session, value, param);
+            case "affection" -> evaluateAffection(session, value);
             default -> false;
         };
     }
@@ -98,11 +93,14 @@ public class ConditionEvaluator {
         }
     }
 
-    /**
-     * 求值 OR 表达式 —— 条件之间用 | 分隔，任一满足即返回 true。
-     *
-     * <p>每段先按 AND 求值，再对结果取 OR。</p>
-     */
+    private boolean evaluateAffection(GameSession session, String threshold) {
+        try {
+            return session.getPlayer().getAffection() >= Integer.parseInt(threshold);
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
     public boolean evaluateOr(GameSession session, String condition) {
         if (condition == null || condition.isBlank()) return true;
         if (condition.contains("|")) {
@@ -114,11 +112,6 @@ public class ConditionEvaluator {
         return evaluateAnd(session, condition);
     }
 
-    /**
-     * 求值 AND 表达式 —— 条件之间用 & 分隔，全部满足才返回 true。
-     *
-     * <p>每个原子条件调用 {@link #evaluate} 求值。</p>
-     */
     public boolean evaluateAnd(GameSession session, String condition) {
         if (condition == null || condition.isBlank()) return true;
         if (condition.contains("&")) {

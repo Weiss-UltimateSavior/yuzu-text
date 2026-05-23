@@ -296,6 +296,7 @@ public class GameService {
         state.put("revelation", p.getRevelation());
         state.put("affection", p.getAffection());
         state.put("inventory", new ArrayList<>(p.getInventory()));
+        state.put("yuzuInventory", new ArrayList<>(session.getYuzuInventory()));
         state.put("foundItems", new ArrayList<>(session.getFoundItems()));
         state.put("solvedPuzzles", new ArrayList<>(session.getSolvedPuzzles()));
         state.put("failedPuzzles", new ArrayList<>(session.getFailedPuzzles()));
@@ -353,10 +354,17 @@ public class GameService {
         state.put("clues", clues);
 
         Map<String, String> npcNames = new LinkedHashMap<>();
+        Map<String, Map<String, String>> npcInfo = new LinkedHashMap<>();
         for (NpcConfig npc : dataLoader.getNpcs()) {
             npcNames.put(npc.getId(), npc.getName());
+            Map<String, String> detail = new LinkedHashMap<>();
+            detail.put("name", npc.getName());
+            detail.put("description", npc.getDescription());
+            detail.put("dialogueHint", npc.getDialogueHint());
+            npcInfo.put(npc.getId(), detail);
         }
         state.put("npcNames", npcNames);
+        state.put("npcInfo", npcInfo);
 
         Map<String, String> puzzleNames = new LinkedHashMap<>();
         for (PuzzleConfig puzzle : dataLoader.getPuzzles()) {

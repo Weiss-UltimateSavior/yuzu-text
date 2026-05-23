@@ -6,15 +6,12 @@ import com.yuzugame.service.LlmService;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class PuzzleAI {
 
     private final LlmService llm;
     private final GameDataLoader dataLoader;
-
-    private final Map<String, List<String>> puzzleMemory = new ConcurrentHashMap<>(); // 谜题专属对话记忆
 
     public PuzzleAI(LlmService llm, GameDataLoader dataLoader) {
         this.llm = llm;
@@ -29,33 +26,51 @@ public class PuzzleAI {
         return dataLoader.getGameConfig();
     }
 
-    public void clearSessionMemory(String sessionId) { // 会话结束时清理所有谜题记忆
-        puzzleMemory.keySet().removeIf(key -> key.startsWith(sessionId + ":"));
+    public void clearSessionMemory(String sessionId) {
+        // no-op: memory is now stored in GameSession, cleared via clearAllPuzzleMemory()
     }
 
-    public void clearPuzzleMemory(String sessionId, String puzzleId) { // 谜题解决后清理该谜题记忆
-        puzzleMemory.remove(sessionId + ":" + puzzleId);
+    public void clearPuzzleMemory(String sessionId, String puzzleId) {
+        // no-op: memory is now stored in GameSession, cleared via GameSession.clearPuzzleMemory()
     }
 
     public String handle(GameSession session, PuzzleConfig puzzle, MapConfig currentMap, String playerMessage) {
         String prompt = buildPrompt(session, puzzle, currentMap);
-        String key = session.getSessionId() + ":" + puzzle.getId();
 
         List<Map<String, String>> history = new ArrayList<>();
-        List<String> memory = puzzleMemory.getOrDefault(key, List.of());
-        for (String m : memory) { // 将历史记忆作为assistant消息注入
-            history.add(Map.of("role", "assistant", "content", m));
+        for (PuzzleMemoryEntry entry : session.getPuzzleMemoryEntries(puzzle.getId())) {
+            history.add(Map.of("role", entry.role(), "content", entry.content()));
+        }
+
+        if (history.isEmpty()) {
+            List<GameSession.ChatMessage> recentContext = buildRecentContext(session);
+            for (GameSession.ChatMessage msg : recentContext) {
+                String role = switch (msg.senderType()) {
+                    case "PLAYER" -> "user";
+                    case "MAP_AI" -> "user";
+                    default -> "user";
+                };
+                String label = switch (msg.senderType()) {
+                    case "MAP_AI" -> "【场景描写】";
+                    case "NPC_AI" -> "【" + (msg.npcId() != null ? msg.npcId() : "NPC") + "】";
+                    case "PROTAGONIST_AI" -> "【柚子】";
+                    case "DIRECTOR_AI" -> "【导演旁白】";
+                    case "PLAYER" -> "";
+                    default -> "";
+                };
+                if (!msg.content().isBlank()) {
+                    history.add(Map.of("role", role, "content", label + msg.content()));
+                }
+            }
         }
 
         String response = llm.chat(prompt, playerMessage, history.isEmpty() ? null : history);
 
-        puzzleMemory.computeIfAbsent(key, k -> new ArrayList<>()).add(response); // 记录本轮回复
+        session.addPuzzleMemoryEntry(puzzle.getId(), new PuzzleMemoryEntry("user", playerMessage));
+        session.addPuzzleMemoryEntry(puzzle.getId(), new PuzzleMemoryEntry("assistant", response));
 
-        int maxRounds = gameConfig().getMaxPuzzleMemoryRounds(); // 超出上限时截断旧记忆
-        if (puzzleMemory.get(key).size() > maxRounds) {
-            List<String> old = puzzleMemory.get(key);
-            puzzleMemory.put(key, new ArrayList<>(old.subList(old.size() - maxRounds, old.size())));
-        }
+        int maxRounds = gameConfig().getMaxPuzzleMemoryRounds();
+        session.truncatePuzzleMemory(puzzle.getId(), maxRounds);
 
         return response;
     }
@@ -63,8 +78,17 @@ public class PuzzleAI {
     private String buildPrompt(GameSession session, PuzzleConfig puzzle, MapConfig currentMap) {
         StringBuilder sb = new StringBuilder(puzzle.getSystemPrompt());
 
+        sb.append("\n\n=== 场景信息 ===\n");
+        sb.append("地图: ").append(currentMap.getName()).append("\n");
+        sb.append("章节: ").append(currentMap.getChapterName()).append("\n");
+        sb.append("气氛: ").append(currentMap.getAtmosphere()).append("\n");
+        sb.append("当前回合: ").append(session.getTurn()).append(" (本地图内: ").append(session.getMapTurns()).append(")\n");
+        if (session.isPuzzleSolved(puzzle.getId())) {
+            sb.append("出口: ").append(currentMap.getExitHint()).append("\n");
+        }
+
         if (currentMap.getAreas() != null && !currentMap.getAreas().isEmpty()) {
-            sb.append("\n\n=== 区域（与地图AI一致） ===\n");
+            sb.append("\n=== 区域（与地图AI一致） ===\n");
             int idx = 1;
             for (Map<String, String> area : currentMap.getAreas()) {
                 sb.append(idx++).append(". ").append(area.get("name")).append("：").append(area.get("description")).append("\n");
@@ -107,27 +131,36 @@ public class PuzzleAI {
                 .replace("{sanity}", String.valueOf(session.getPlayer().getSanity()))).append("\n");
 
         int attempts = session.getPuzzleAttempts(puzzle.getId());
-        if (attempts >= puzzle.getMaxAttempts()) { // 已达最大尝试次数，提示FAIL
+        if (attempts >= puzzle.getMaxAttempts()) {
             String failNotice = prompts().getMaxAttemptsReachedTemplate()
                     .replace("{puzzleId}", puzzle.getId())
                     .replace("{failSanityPenalty}", String.valueOf(puzzle.getFailSanityPenalty()));
             sb.append("\n").append(failNotice).append("\n");
         }
 
-        int minRounds = gameConfig().getPuzzleMinRoundsBase() + puzzle.getDifficulty(); // 最少交互轮数 = 基础 + 难度
-        int currentRounds = puzzleMemory.getOrDefault(session.getSessionId() + ":" + puzzle.getId(), List.of()).size();
+        int minRounds = gameConfig().getPuzzleMinRoundsBase() + puzzle.getDifficulty();
+        int currentRounds = session.getPuzzleMemoryEntries(puzzle.getId()).stream()
+                .filter(e -> "assistant".equals(e.role()))
+                .mapToInt(e -> 1)
+                .sum();
 
         String rules = prompts().getSolvingRules()
                 .replace("{minRounds}", String.valueOf(minRounds))
                 .replace("{difficulty}", String.valueOf(puzzle.getDifficulty()))
-                .replace("{currentRounds}", String.valueOf(currentRounds));
+                .replace("{currentRounds}", String.valueOf(currentRounds))
+                .replace("{maxAttempts}", String.valueOf(puzzle.getMaxAttempts()))
+                .replace("{failSanityPenalty}", String.valueOf(puzzle.getFailSanityPenalty()));
         sb.append("\n").append(rules).append("\n");
 
         sb.append("\n").append(prompts().getAvailableTagsTemplate()
                 .replace("{puzzleId}", puzzle.getId()));
-        if (puzzle.getRequiredItemId() != null) { // 需要物品时追加ITEM:TAKE标签
+        if (puzzle.getRequiredItemId() != null) {
             sb.append(prompts().getItemTakeTagTemplate()
                     .replace("{itemId}", puzzle.getRequiredItemId()));
+        }
+
+        if (gameConfig().getArchiveMapId().equals(currentMap.getId())) {
+            sb.append("\n").append(dataLoader.getPrompts().getMap().getArchiveSpecialRule()).append("\n");
         }
 
         List<String> stillLocked = new ArrayList<>(currentMap.getNpcIds());
@@ -154,7 +187,7 @@ public class PuzzleAI {
             sb.append("\n\n有前置物品的解谜成功示例（必须同时消耗物品）：\n<ctrl>\nPUZZLE:SOLVE:").append(puzzle.getId()).append("\nITEM:TAKE:").append(puzzle.getRequiredItemId()).append("\nREVELATION:+5\n</ctrl>\n");
         }
 
-        if (!stillLocked.isEmpty()) { // 附带NPC解锁的示例
+        if (!stillLocked.isEmpty()) {
             sb.append("\n\n").append(prompts().getSolveWithNpcExample()
                     .replace("{puzzleId}", puzzle.getId())
                     .replace("{npcId}", stillLocked.get(0))).append("\n");
@@ -168,5 +201,12 @@ public class PuzzleAI {
         if (dynamicName != null) return dynamicName;
         ItemConfig item = dataLoader.getItem(itemId);
         return item != null ? item.getName() : itemId;
+    }
+
+    private List<GameSession.ChatMessage> buildRecentContext(GameSession session) {
+        List<GameSession.ChatMessage> all = session.getChatHistory();
+        int limit = Math.min(gameConfig().getMapAiHistoryLimit(), all.size());
+        int start = Math.max(0, all.size() - limit);
+        return all.subList(start, all.size());
     }
 }
