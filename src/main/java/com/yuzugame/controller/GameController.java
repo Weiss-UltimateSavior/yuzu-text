@@ -104,4 +104,13 @@ public class GameController {
         String code = body.get("code");
         return gameService.redeemCode(sessionId, code);
     }
+
+    @PostMapping("/config-llm")
+    public Map<String, Object> configureLlm(@RequestBody Map<String, String> body) {
+        String sessionId = body.get("sessionId");
+        String baseUrl = body.get("baseUrl");
+        String apiKey = body.get("apiKey");
+        String model = body.get("model");
+        return gameService.configureLlm(sessionId, baseUrl, apiKey, model);
+    }
 }

@@ -65,6 +65,22 @@ public class GameSession {
 
     private Map<String, List<PuzzleMemoryEntry>> puzzleMemory = new HashMap<>();
 
+    private String customLlmBaseUrl;
+    private String customLlmApiKey;
+    private String customLlmModel;
+
+    public String getCustomLlmBaseUrl() { return customLlmBaseUrl; }
+    public void setCustomLlmBaseUrl(String v) { this.customLlmBaseUrl = v; }
+    public String getCustomLlmApiKey() { return customLlmApiKey; }
+    public void setCustomLlmApiKey(String v) { this.customLlmApiKey = v; }
+    public String getCustomLlmModel() { return customLlmModel; }
+    public void setCustomLlmModel(String v) { this.customLlmModel = v; }
+    public boolean hasCustomLlm() {
+        return customLlmBaseUrl != null && !customLlmBaseUrl.isBlank()
+                && customLlmApiKey != null && !customLlmApiKey.isBlank()
+                && customLlmModel != null && !customLlmModel.isBlank();
+    }
+
     public String getSessionId() { return sessionId; }
     public void setSessionId(String sessionId) { this.sessionId = sessionId; }
 

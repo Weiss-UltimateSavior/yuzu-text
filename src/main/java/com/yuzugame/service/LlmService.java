@@ -47,8 +47,12 @@ public class LlmService {
 
     private static final Logger log = LoggerFactory.getLogger(LlmService.class);
 
-    private static final int MAX_RETRIES = 3;
-    private static final long BASE_RETRY_DELAY_MS = 2000;
+    public static class LlmCallException extends RuntimeException {
+        public LlmCallException(String message) { super(message); }
+    }
+
+    private static final int MAX_RETRIES = 5;
+    private static final long BASE_RETRY_DELAY_MS = 3000;
 
     @Value("${yuzu.llm.base-url}")
     private String baseUrl;
@@ -71,10 +75,6 @@ public class LlmService {
     }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-    private String getApiUrl() {
-        return baseUrl + "/chat/completions";
-    }
 
     private final HttpClient client = createClient();
 
@@ -122,34 +122,24 @@ public class LlmService {
         return chat(systemPrompt, userMessage, null);
     }
 
-    /**
-     * 带对话历史的 LLM 调用 —— 核心方法。
-     *
-     * <p>构建 OpenAI 兼容的 Chat Completion 请求，消息顺序为：
-     * <ol>
-     *   <li>system —— 系统提示词（Agent 的角色和规则定义）</li>
-     *   <li>history —— 历史对话（assistant 角色，用于谜题多轮交互）</li>
-     *   <li>user —— 当前用户输入</li>
-     * </ol></p>
-     *
-     * <p>请求参数：temperature=0.8（适度创造性），max_tokens=2048，
-     * 超时时间 60 秒。</p>
-     *
-     * @param systemPrompt 系统提示词
-     * @param userMessage 用户消息
-     * @param history 对话历史（可为 null），每条记录含 role 和 content
-     * @return LLM 生成的文本；HTTP 错误返回 {@code [LLM Error: statusCode]}；
-     *         连接异常返回 {@code [LLM Connection Error: message]}
-     */
     public String chat(String systemPrompt, String userMessage, List<Map<String, String>> history) {
-        String requestBody = buildRequestBody(systemPrompt, userMessage, history);
+        return chat(systemPrompt, userMessage, history, null, null, null);
+    }
+
+    public String chat(String systemPrompt, String userMessage, List<Map<String, String>> history,
+                       String overrideBaseUrl, String overrideApiKey, String overrideModel) {
+        String useBaseUrl = (overrideBaseUrl != null && !overrideBaseUrl.isBlank()) ? overrideBaseUrl : this.baseUrl;
+        String useApiKey = (overrideApiKey != null && !overrideApiKey.isBlank()) ? overrideApiKey : this.apiKey;
+        String useModel = (overrideModel != null && !overrideModel.isBlank()) ? overrideModel : this.model;
+        String requestBody = buildRequestBody(useModel, systemPrompt, userMessage, history);
+        String apiUrl = useBaseUrl + "/chat/completions";
 
         for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
                 HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(getApiUrl()))
+                        .uri(URI.create(apiUrl))
                         .header("Content-Type", "application/json")
-                        .header("Authorization", "Bearer " + apiKey)
+                        .header("Authorization", "Bearer " + useApiKey)
                         .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                         .timeout(Duration.ofSeconds(90))
                         .build();
@@ -160,33 +150,70 @@ public class LlmService {
                     return extractContent(response.body());
                 }
 
-                log.warn("LLM request failed with status {} (attempt {}/{})", response.statusCode(), attempt, MAX_RETRIES);
+                log.warn("LLM request failed with status {} (attempt {}/{}) url={}", response.statusCode(), attempt, MAX_RETRIES, useBaseUrl);
 
                 if (attempt < MAX_RETRIES) {
                     long delay = BASE_RETRY_DELAY_MS * (1L << (attempt - 1));
                     Thread.sleep(delay);
                 } else {
-                    return "[LLM Error: " + response.statusCode() + "]";
+                    throw new LlmCallException("LLM 请求失败（HTTP " + response.statusCode() + "），已重试 " + MAX_RETRIES + " 次");
                 }
 
             } catch (IOException | InterruptedException e) {
-                log.warn("LLM connection error: {} (attempt {}/{})", e.getMessage(), attempt, MAX_RETRIES);
+                log.warn("LLM connection error: {} (attempt {}/{}) url={}", e.getMessage(), attempt, MAX_RETRIES, useBaseUrl);
 
                 if (attempt < MAX_RETRIES) {
                     long delay = BASE_RETRY_DELAY_MS * (1L << (attempt - 1));
                     try { Thread.sleep(delay); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
                 } else {
-                    return "[LLM Connection Error: " + e.getMessage() + "]";
+                    throw new LlmCallException("LLM 连接失败：" + e.getMessage() + "，已重试 " + MAX_RETRIES + " 次");
                 }
             }
         }
 
-        return "[LLM Error: max retries exceeded]";
+        throw new LlmCallException("LLM 请求失败：超过最大重试次数");
     }
 
-    private String buildRequestBody(String systemPrompt, String userMessage, List<Map<String, String>> history) {
+    public String validateApi(String testBaseUrl, String testApiKey, String testModel) {
+        if (testBaseUrl == null || testBaseUrl.isBlank()) return "baseUrl 不能为空";
+        if (testApiKey == null || testApiKey.isBlank()) return "apiKey 不能为空";
+        if (testModel == null || testModel.isBlank()) return "model 不能为空";
+
+        String apiUrl = testBaseUrl.replaceAll("/+$", "") + "/chat/completions";
+        String requestBody = buildRequestBody(testModel, "You are a test assistant.", "Say hi in one word.", null);
+
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(apiUrl))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + testApiKey)
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                    .timeout(Duration.ofSeconds(30))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200) {
+                return null;
+            }
+            if (response.statusCode() == 401 || response.statusCode() == 403) {
+                return "API 认证失败（HTTP " + response.statusCode() + "），请检查 apiKey 是否正确";
+            }
+            if (response.statusCode() == 404) {
+                return "API 地址无效（HTTP 404），请检查 baseUrl 是否正确";
+            }
+            return "API 返回错误（HTTP " + response.statusCode() + "）";
+        } catch (IOException e) {
+            return "无法连接到 API 地址：" + e.getMessage();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return "API 校验被中断";
+        }
+    }
+
+    private String buildRequestBody(String useModel, String systemPrompt, String userMessage, List<Map<String, String>> history) {
         StringBuilder json = new StringBuilder();
-        json.append("{\"model\":\"").append(model).append("\",\"messages\":[");
+        json.append("{\"model\":\"").append(useModel).append("\",\"messages\":[");
 
         json.append("{\"role\":\"system\",\"content\":").append(jsonEscape(systemPrompt)).append("}");
 

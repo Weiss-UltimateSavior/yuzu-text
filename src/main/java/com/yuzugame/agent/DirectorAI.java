@@ -27,7 +27,18 @@ public class DirectorAI {
         return dataLoader.getPrompts().getDirector();
     }
 
-    public String openingMonologue(StoryConfig story, MapConfig startMap) {
+    private String chatWithSession(GameSession session, String systemPrompt, String userMessage) {
+        return chatWithSession(session, systemPrompt, userMessage, null);
+    }
+
+    private String chatWithSession(GameSession session, String systemPrompt, String userMessage, List<Map<String, String>> history) {
+        if (session != null && session.hasCustomLlm()) {
+            return llm.chat(systemPrompt, userMessage, history, session.getCustomLlmBaseUrl(), session.getCustomLlmApiKey(), session.getCustomLlmModel());
+        }
+        return llm.chat(systemPrompt, userMessage, history);
+    }
+
+    public String openingMonologue(GameSession session, StoryConfig story, MapConfig startMap) {
         String template = prompts().getOpeningMonologueTemplate()
                 .replace("{mapName}", startMap.getName());
         String prompt = story.getDirectorSystemPrompt() + "\n\n=== 起始场景 ===\n"
@@ -36,7 +47,7 @@ public class DirectorAI {
                 + "场景描述: " + startMap.getDescription() + "\n"
                 + "氛围: " + startMap.getAtmosphere() + "\n\n"
                 + template;
-        return llm.chat(prompt, "[游戏启动，生成开场旁白]");
+        return chatWithSession(session, prompt, "[游戏启动，生成开场旁白]");
     }
 
     public String stageReport(GameSession session, MapConfig currentMap, StoryConfig story) {
@@ -52,7 +63,7 @@ public class DirectorAI {
                 .replace("{revelation}", String.valueOf(session.getPlayer().getRevelation()))
                 .replace("{affection}", String.valueOf(session.getPlayer().getAffection()));
 
-        return llm.chat(prompt, template);
+        return chatWithSession(session, prompt, template);
     }
 
     public String ending(GameSession session, String endingType, StoryConfig story) {
@@ -75,7 +86,7 @@ public class DirectorAI {
             context.append("\n请根据以上游玩记录和玩家属性，生成贴合玩家经历的个性化结局叙事。");
         }
 
-        return llm.chat(prompt, context.toString());
+        return chatWithSession(session, prompt, context.toString());
     }
 
     private String resolveNarrativeHint(String endingType) {
@@ -95,7 +106,7 @@ public class DirectorAI {
         String prompt = buildPrompt(session, currentMap, story);
         String context = prompts().getSanityWarningTemplate()
                 .replace("{sanity}", String.valueOf(session.getPlayer().getSanity()));
-        return llm.chat(prompt, context); // 仅叙事反馈，不改变状态（衰减由GameEngine处理）
+        return chatWithSession(session, prompt, context);
     }
 
     private String buildPrompt(GameSession session, MapConfig currentMap, StoryConfig story) {

@@ -28,10 +28,17 @@ public class NpcAI {
         return dataLoader.getGameConfig();
     }
 
+    private String chatWithSession(GameSession session, String systemPrompt, String userMessage, List<Map<String, String>> history) {
+        if (session.hasCustomLlm()) {
+            return llm.chat(systemPrompt, userMessage, history, session.getCustomLlmBaseUrl(), session.getCustomLlmApiKey(), session.getCustomLlmModel());
+        }
+        return llm.chat(systemPrompt, userMessage, history);
+    }
+
     public String respond(GameSession session, NpcConfig npc, MapConfig currentMap, String playerMessage) {
         String prompt = buildPrompt(session, npc, currentMap);
         List<Map<String, String>> history = buildMixedHistory(session, npc);
-        return llm.chat(prompt, playerMessage, history.isEmpty() ? null : history);
+        return chatWithSession(session, prompt, playerMessage, history.isEmpty() ? null : history);
     }
 
     private List<Map<String, String>> buildMixedHistory(GameSession session, NpcConfig npc) {

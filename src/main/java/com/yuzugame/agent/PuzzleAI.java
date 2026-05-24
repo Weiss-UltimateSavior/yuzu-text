@@ -26,6 +26,13 @@ public class PuzzleAI {
         return dataLoader.getGameConfig();
     }
 
+    private String chatWithSession(GameSession session, String systemPrompt, String userMessage, List<Map<String, String>> history) {
+        if (session.hasCustomLlm()) {
+            return llm.chat(systemPrompt, userMessage, history, session.getCustomLlmBaseUrl(), session.getCustomLlmApiKey(), session.getCustomLlmModel());
+        }
+        return llm.chat(systemPrompt, userMessage, history);
+    }
+
     public void clearSessionMemory(String sessionId) {
         // no-op: memory is now stored in GameSession, cleared via clearAllPuzzleMemory()
     }
@@ -64,7 +71,7 @@ public class PuzzleAI {
             }
         }
 
-        String response = llm.chat(prompt, playerMessage, history.isEmpty() ? null : history);
+        String response = chatWithSession(session, prompt, playerMessage, history.isEmpty() ? null : history);
 
         session.addPuzzleMemoryEntry(puzzle.getId(), new PuzzleMemoryEntry("user", playerMessage));
         session.addPuzzleMemoryEntry(puzzle.getId(), new PuzzleMemoryEntry("assistant", response));

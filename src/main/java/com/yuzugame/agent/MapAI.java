@@ -28,17 +28,24 @@ public class MapAI {
         return dataLoader.getGameConfig();
     }
 
+    private String chatWithSession(GameSession session, String systemPrompt, String userMessage, List<Map<String, String>> history) {
+        if (session.hasCustomLlm()) {
+            return llm.chat(systemPrompt, userMessage, history, session.getCustomLlmBaseUrl(), session.getCustomLlmApiKey(), session.getCustomLlmModel());
+        }
+        return llm.chat(systemPrompt, userMessage, history);
+    }
+
     public String describe(GameSession session, MapConfig currentMap) {
         String prompt = buildPrompt(session, currentMap);
         List<Map<String, String>> history = buildMixedHistory(session);
-        return llm.chat(prompt, "[玩家正在观察周围环境]", history.isEmpty() ? null : history);
+        return chatWithSession(session, prompt, "[玩家正在观察周围环境]", history.isEmpty() ? null : history);
     }
 
     public String autoDescribe(GameSession session, MapConfig currentMap) {
         String prompt = buildPrompt(session, currentMap);
         prompt += "\n\n" + prompts().getAutoDescribePrompt(); // 首次进入：强制环境描写
         List<Map<String, String>> history = buildMixedHistory(session);
-        return llm.chat(prompt, "[玩家首次进入 " + currentMap.getName() + "，提供环境描写]", history.isEmpty() ? null : history);
+        return chatWithSession(session, prompt, "[玩家首次进入 " + currentMap.getName() + "，提供环境描写]", history.isEmpty() ? null : history);
     }
 
     public String transitionDescribe(GameSession session, MapConfig fromMap, MapConfig toMap) {
@@ -50,7 +57,7 @@ public class MapAI {
                 .replace("{toMapName}", toMap.getName());
         prompt += "\n\n" + template;
         List<Map<String, String>> history = buildMixedHistory(session);
-        return llm.chat(prompt, "[玩家从" + fromMap.getName() + "前往" + toMap.getName() + "，描写过渡场景]", history.isEmpty() ? null : history);
+        return chatWithSession(session, prompt, "[玩家从" + fromMap.getName() + "前往" + toMap.getName() + "，描写过渡场景]", history.isEmpty() ? null : history);
     }
 
     private List<Map<String, String>> buildMixedHistory(GameSession session) {

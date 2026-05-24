@@ -50,14 +50,17 @@ public class GameService {
     private final ObjectMapper objectMapper;
     private final GameDataLoader dataLoader;
 
+    private final LlmService llmService;
+
     public GameService(GameEngine engine, GameSessionRepository repository,
                        StringRedisTemplate redisTemplate, ObjectMapper objectMapper,
-                       GameDataLoader dataLoader) {
+                       GameDataLoader dataLoader, LlmService llmService) {
         this.engine = engine;
         this.repository = repository;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.dataLoader = dataLoader;
+        this.llmService = llmService;
     }
 
     /**
@@ -165,6 +168,33 @@ public class GameService {
      *
      * <p>兑换码配置文件：{@code src/main/resources/data/redemption_codes.json}</p>
      */
+    public Map<String, Object> configureLlm(String sessionId, String baseUrl, String apiKey, String model) {
+        GameSession session = loadSession(sessionId);
+        if (session == null) {
+            return Map.of("success", false, "message", "会话不存在");
+        }
+        if (session.isEnded()) {
+            return Map.of("success", false, "message", "游戏已结束，无法修改配置");
+        }
+
+        boolean isClearing = (baseUrl == null || baseUrl.isBlank())
+                          && (apiKey == null || apiKey.isBlank())
+                          && (model == null || model.isBlank());
+        if (!isClearing) {
+            String error = llmService.validateApi(baseUrl, apiKey, model);
+            if (error != null) {
+                return Map.of("success", false, "message", "API 校验失败：" + error);
+            }
+        }
+
+        session.setCustomLlmBaseUrl(baseUrl);
+        session.setCustomLlmApiKey(apiKey);
+        session.setCustomLlmModel(model);
+        saveSession(session);
+        log.info("LLM config updated for session {}: model={}", sessionId, model);
+        return Map.of("success", true, "message", isClearing ? "已恢复使用系统默认 API" : "LLM 配置已更新并校验通过");
+    }
+
     public Map<String, Object> redeemCode(String sessionId, String code) {
         if (code == null || code.isBlank()) {
             return Map.of("success", false, "message", "兑换码不能为空");

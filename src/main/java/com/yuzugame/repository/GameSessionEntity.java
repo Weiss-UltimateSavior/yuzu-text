@@ -107,6 +107,15 @@ public class GameSessionEntity {
     @Column(length = 16)
     private String endingType;
 
+    @Column(length = 512)
+    private String customLlmBaseUrl;
+
+    @Column(length = 256)
+    private String customLlmApiKey;
+
+    @Column(length = 128)
+    private String customLlmModel;
+
     private Instant createdAt;
 
     private Instant updatedAt;
@@ -142,6 +151,9 @@ public class GameSessionEntity {
         e.chatHistory = session.getChatHistory();
         e.ended = session.isEnded();
         e.endingType = session.getEndingType();
+        e.customLlmBaseUrl = session.getCustomLlmBaseUrl();
+        e.customLlmApiKey = session.getCustomLlmApiKey();
+        e.customLlmModel = session.getCustomLlmModel();
         e.updatedAt = Instant.now();
         if (e.createdAt == null) e.createdAt = Instant.now();
         return e;
@@ -176,6 +188,9 @@ public class GameSessionEntity {
         if (chatHistory != null) s.getChatHistory().addAll(chatHistory);
         s.setEnded(ended);
         s.setEndingType(endingType);
+        s.setCustomLlmBaseUrl(customLlmBaseUrl);
+        s.setCustomLlmApiKey(customLlmApiKey);
+        s.setCustomLlmModel(customLlmModel);
         return s;
     }
 

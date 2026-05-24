@@ -2,7 +2,9 @@ package com.yuzugame.engine;
 
 import com.yuzugame.agent.*;
 import com.yuzugame.model.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yuzugame.service.InputAuditor;
+import com.yuzugame.service.LlmService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -50,6 +52,7 @@ public class GameEngine {
     private final ConditionEvaluator evaluator;
     private final GameDataLoader dataLoader;
     private final InputAuditor inputAuditor;
+    private final ObjectMapper objectMapper;
 
     private Pattern exploreKeywordsPattern;
     private Pattern moveKeywordsPattern;
@@ -58,7 +61,7 @@ public class GameEngine {
     public GameEngine(DirectorAI director, ProtagonistAI protagonist, MapAI mapAI,
                       NpcAI npcAI, PuzzleAI puzzleAI, GameStateManager stateManager,
                       ConditionEvaluator evaluator, GameDataLoader dataLoader,
-                      InputAuditor inputAuditor) {
+                      InputAuditor inputAuditor, ObjectMapper objectMapper) {
         this.director = director;
         this.protagonist = protagonist;
         this.mapAI = mapAI;
@@ -68,6 +71,7 @@ public class GameEngine {
         this.evaluator = evaluator;
         this.dataLoader = dataLoader;
         this.inputAuditor = inputAuditor;
+        this.objectMapper = objectMapper;
     }
 
     private GameConfig gameConfig() {
@@ -120,6 +124,19 @@ public class GameEngine {
             log.warn("Player input blocked by auditor for session {}", session.getSessionId());
             return auditResult;
         }
+
+        String snapshot = snapshotSession(session);
+
+        try {
+            return doProcessMessage(session, playerMessage);
+        } catch (LlmService.LlmCallException e) {
+            log.error("LLM call failed during turn for session {}, rolling back: {}", session.getSessionId(), e.getMessage());
+            restoreSession(session, snapshot);
+            return "【系统】AI 服务暂时不可用，请稍后重试。（" + e.getMessage() + "）";
+        }
+    }
+
+    private String doProcessMessage(GameSession session, String playerMessage) {
 
         StoryConfig story = dataLoader.getStory();
         MapConfig currentMap = dataLoader.getMap(session.getCurrentMapId());
@@ -459,16 +476,19 @@ public class GameEngine {
         session.addYuzuItem("item_sedative");
 
         MapConfig startMap = dataLoader.getMap(gameConfig().getStartingMapId());
-        String opening = director.openingMonologue(story, startMap);
-        String stripped = stateManager.stripInternal(opening);
-        List<String> tags = stateManager.extractTags(opening);
-        // 安全过滤：开场阶段禁止切换地图/章节/触发结局
-        List<String> safeTags = tags.stream()
-                .filter(t -> !t.startsWith("MAP:") && !t.startsWith("CHAPTER:") && !t.startsWith("ENDING:"))
-                .toList();
-        stateManager.executeTags(session, safeTags, AgentType.DIRECTOR);
-
-        return outputPrefix("directorOpening") + "\n" + stripped;
+        try {
+            String opening = director.openingMonologue(session, story, startMap);
+            String stripped = stateManager.stripInternal(opening);
+            List<String> tags = stateManager.extractTags(opening);
+            List<String> safeTags = tags.stream()
+                    .filter(t -> !t.startsWith("MAP:") && !t.startsWith("CHAPTER:") && !t.startsWith("ENDING:"))
+                    .toList();
+            stateManager.executeTags(session, safeTags, AgentType.DIRECTOR);
+            return outputPrefix("directorOpening") + "\n" + stripped;
+        } catch (LlmService.LlmCallException e) {
+            log.error("LLM call failed during initGame for session {}: {}", session.getSessionId(), e.getMessage());
+            return "【系统】AI 服务暂时不可用，请稍后重试。（" + e.getMessage() + "）";
+        }
     }
 
     /**
@@ -478,27 +498,33 @@ public class GameEngine {
      */
     public String processOpening(GameSession session) {
         StoryConfig story = dataLoader.getStory();
-        session.incrementTurn();
-        applySanityDecay(session, story);
+        String snapshot = snapshotSession(session);
 
-        ProtagonistConfig config = dataLoader.getProtagonist();
-        MapConfig currentMap = dataLoader.getMap(session.getCurrentMapId());
-        // 防御性检查：如果 currentMapId 被 LLM 篡改为无效值，重置到初始地图
-        if (currentMap == null) {
-            log.error("Invalid currentMapId: {}, resetting to {}", session.getCurrentMapId(), gameConfig().getStartingMapId());
-            session.setCurrentMapId(gameConfig().getStartingMapId());
-            currentMap = dataLoader.getMap(gameConfig().getStartingMapId());
+        try {
+            session.incrementTurn();
+            applySanityDecay(session, story);
+
+            ProtagonistConfig config = dataLoader.getProtagonist();
+            MapConfig currentMap = dataLoader.getMap(session.getCurrentMapId());
+            if (currentMap == null) {
+                log.error("Invalid currentMapId: {}, resetting to {}", session.getCurrentMapId(), gameConfig().getStartingMapId());
+                session.setCurrentMapId(gameConfig().getStartingMapId());
+                currentMap = dataLoader.getMap(gameConfig().getStartingMapId());
+            }
+
+            String yuzuIntro = protagonist.opening(session, config, currentMap);
+            String stripped = stateManager.stripInternal(yuzuIntro);
+            session.addChatMessage(new GameSession.ChatMessage("PROTAGONIST_AI", null, stripped));
+            stateManager.applyControlTags(session, yuzuIntro, AgentType.PROTAGONIST);
+
+            session.setGamePhase("playing");
+
+            return outputPrefix("protagonist") + stripped;
+        } catch (LlmService.LlmCallException e) {
+            log.error("LLM call failed during processOpening for session {}: {}", session.getSessionId(), e.getMessage());
+            restoreSession(session, snapshot);
+            return "【系统】AI 服务暂时不可用，请稍后重试。（" + e.getMessage() + "）";
         }
-
-        String yuzuIntro = protagonist.opening(session, config, currentMap);
-        String stripped = stateManager.stripInternal(yuzuIntro);
-        session.addChatMessage(new GameSession.ChatMessage("PROTAGONIST_AI", null, stripped));
-        stateManager.applyControlTags(session, yuzuIntro, AgentType.PROTAGONIST);
-
-        // 开场结束，进入正常游戏阶段
-        session.setGamePhase("playing");
-
-        return outputPrefix("protagonist") + stripped;
     }
 
     /**
@@ -598,7 +624,7 @@ public class GameEngine {
         String endingStripped = stateManager.stripInternal(ending);
         outputs.add(outputPrefix("ending") + endingStripped);
 
-        String yuzuEnding = protagonist.endingLine(session.getPlayer(), pConfig, endingType);
+        String yuzuEnding = protagonist.endingLine(session, session.getPlayer(), pConfig, endingType);
         String yuzuEndingStripped = stateManager.stripInternal(yuzuEnding);
         outputs.add(outputPrefix("protagonistEnding") + yuzuEndingStripped);
 
@@ -607,5 +633,77 @@ public class GameEngine {
         stateManager.applyControlTags(session, ending, AgentType.DIRECTOR);
         // 清理该会话的所有谜题AI记忆
         session.clearAllPuzzleMemory();
+    }
+
+    private String snapshotSession(GameSession session) {
+        try {
+            return objectMapper.writeValueAsString(session);
+        } catch (Exception e) {
+            log.error("Failed to snapshot session {}: {}", session.getSessionId(), e.getMessage());
+            return null;
+        }
+    }
+
+    private void restoreSession(GameSession session, String snapshot) {
+        if (snapshot == null) {
+            log.warn("No snapshot available for session {}, cannot restore", session.getSessionId());
+            return;
+        }
+        try {
+            GameSession restored = objectMapper.readValue(snapshot, GameSession.class);
+            copySessionState(restored, session);
+            log.info("Session {} restored to pre-turn state", session.getSessionId());
+        } catch (Exception e) {
+            log.error("Failed to restore session {}: {}", session.getSessionId(), e.getMessage());
+        }
+    }
+
+    private void copySessionState(GameSession src, GameSession dst) {
+        dst.setPlayer(src.getPlayer());
+        dst.setCurrentMapId(src.getCurrentMapId());
+        dst.setCurrentChapter(src.getCurrentChapter());
+        dst.setTurn(src.getTurn());
+        dst.setGamePhase(src.getGamePhase());
+        dst.setActivePuzzleId(src.getActivePuzzleId());
+        dst.setMapAutoTriggered(src.isMapAutoTriggered());
+        dst.setExitUnlocked(src.isExitUnlocked());
+        dst.setMapEntryTurn(src.getMapEntryTurn());
+        dst.setCurrentArea(src.getCurrentArea());
+
+        dst.getSolvedPuzzles().clear();
+        dst.getSolvedPuzzles().addAll(src.getSolvedPuzzles());
+        dst.getFailedPuzzles().clear();
+        dst.getFailedPuzzles().addAll(src.getFailedPuzzles());
+        dst.getUnlockedNpcs().clear();
+        dst.getUnlockedNpcs().addAll(src.getUnlockedNpcs());
+        dst.getKilledNpcs().clear();
+        dst.getKilledNpcs().addAll(src.getKilledNpcs());
+        dst.getFoundItems().clear();
+        dst.getFoundItems().addAll(src.getFoundItems());
+        dst.getTriggeredSanityWarnings().clear();
+        dst.getTriggeredSanityWarnings().addAll(src.getTriggeredSanityWarnings());
+        dst.getYuzuInventory().clear();
+        dst.getYuzuInventory().addAll(src.getYuzuInventory());
+        dst.getRevivedNpcs().clear();
+        dst.getRevivedNpcs().addAll(src.getRevivedNpcs());
+
+        dst.getPuzzleAttempts().clear();
+        dst.getPuzzleAttempts().putAll(src.getPuzzleAttempts());
+        dst.getNpcDialogueCounts().clear();
+        dst.getNpcDialogueCounts().putAll(src.getNpcDialogueCounts());
+        dst.getDynamicItemNames().clear();
+        dst.getDynamicItemNames().putAll(src.getDynamicItemNames());
+        dst.getUsedRedemptionCodes().clear();
+        dst.getUsedRedemptionCodes().putAll(src.getUsedRedemptionCodes());
+        dst.getPuzzleMemory().clear();
+        dst.getPuzzleMemory().putAll(src.getPuzzleMemory());
+        dst.getChatHistory().clear();
+        dst.getChatHistory().addAll(src.getChatHistory());
+
+        dst.setEnded(src.isEnded());
+        dst.setEndingType(src.getEndingType());
+        dst.setCustomLlmBaseUrl(src.getCustomLlmBaseUrl());
+        dst.setCustomLlmApiKey(src.getCustomLlmApiKey());
+        dst.setCustomLlmModel(src.getCustomLlmModel());
     }
 }

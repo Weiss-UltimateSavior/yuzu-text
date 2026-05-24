@@ -24,6 +24,17 @@ public class ProtagonistAI {
         return dataLoader.getPrompts().getProtagonist();
     }
 
+    private String chatWithSession(GameSession session, String systemPrompt, String userMessage, List<Map<String, String>> history) {
+        if (session.hasCustomLlm()) {
+            return llm.chat(systemPrompt, userMessage, history, session.getCustomLlmBaseUrl(), session.getCustomLlmApiKey(), session.getCustomLlmModel());
+        }
+        return llm.chat(systemPrompt, userMessage, history);
+    }
+
+    private String chatWithSession(GameSession session, String systemPrompt, String userMessage) {
+        return chatWithSession(session, systemPrompt, userMessage, null);
+    }
+
     private GameConfig gameConfig() {
         return dataLoader.getGameConfig();
     }
@@ -31,22 +42,22 @@ public class ProtagonistAI {
     public String respond(GameSession session, ProtagonistConfig config, MapConfig currentMap, String playerMessage) {
         String prompt = buildPrompt(session, config, currentMap);
         List<Map<String, String>> history = buildMixedHistory(session);
-        return llm.chat(prompt, playerMessage, history.isEmpty() ? null : history);
+        return chatWithSession(session, prompt, playerMessage, history.isEmpty() ? null : history);
     }
 
     public String opening(GameSession session, ProtagonistConfig config, MapConfig currentMap) {
         String prompt = buildPrompt(session, config, currentMap);
         prompt += "\n\n" + prompts().getOpeningPrompt();
-        return llm.chat(prompt, prompts().getOpeningUserMessage());
+        return chatWithSession(session, prompt, prompts().getOpeningUserMessage());
     }
 
-    public String endingLine(Player player, ProtagonistConfig config, String endingType) {
+    public String endingLine(GameSession session, Player player, ProtagonistConfig config, String endingType) {
         String context = prompts().getEndingLineTemplate()
                 .replace("{endingType}", endingType)
                 .replace("{sanity}", String.valueOf(player.getSanity()))
                 .replace("{revelation}", String.valueOf(player.getRevelation()))
                 .replace("{affection}", String.valueOf(player.getAffection()));
-        return llm.chat(config.getSystemPrompt(), context); // 结局时柚子的最后台词
+        return chatWithSession(session, config.getSystemPrompt(), context);
     }
 
     private List<Map<String, String>> buildMixedHistory(GameSession session) {
