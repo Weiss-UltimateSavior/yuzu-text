@@ -31,6 +31,7 @@ public class AdminService {
     private final GameDataLoader dataLoader;
     private final LlmService llmService;
     private final AuditLlmService auditLlmService;
+    private final InputAuditor inputAuditor;
     private final ConfigurableApplicationContext context;
 
     @Value("${yuzu.admin.username}")
@@ -50,12 +51,14 @@ public class AdminService {
                         GameDataLoader dataLoader,
                         LlmService llmService,
                         AuditLlmService auditLlmService,
+                        InputAuditor inputAuditor,
                         ConfigurableApplicationContext context) {
         this.sessionRepo = sessionRepo;
         this.feedbackRepo = feedbackRepo;
         this.dataLoader = dataLoader;
         this.llmService = llmService;
         this.auditLlmService = auditLlmService;
+        this.inputAuditor = inputAuditor;
         this.context = context;
     }
 
@@ -287,6 +290,14 @@ public class AdminService {
 
     public void updateAuditLlmConfig(String baseUrl, String apiKey, String model) {
         auditLlmService.updateConfig(baseUrl, apiKey, model);
+    }
+
+    public boolean isAuditorEnabled() {
+        return inputAuditor.isEnabled();
+    }
+
+    public void setAuditorEnabled(boolean enabled) {
+        inputAuditor.setEnabled(enabled);
     }
 
     public void restart() {

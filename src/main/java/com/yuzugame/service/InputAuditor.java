@@ -16,6 +16,8 @@ public class InputAuditor {
     private final AuditLlmService auditLlmService;
     private final GameDataLoader dataLoader;
 
+    private volatile boolean enabled = true;
+
     private int warningIndex = 0;
 
     public InputAuditor(AuditLlmService auditLlmService, GameDataLoader dataLoader) {
@@ -23,11 +25,24 @@ public class InputAuditor {
         this.dataLoader = dataLoader;
     }
 
+    public boolean isEnabled() { return enabled; }
+    public void setEnabled(boolean v) {
+        boolean old = this.enabled;
+        this.enabled = v;
+        if (old != v) {
+            log.info("InputAuditor enabled: {} -> {}", old, v);
+        }
+    }
+
     private PromptsConfig.AuditorPrompts prompts() {
         return dataLoader.getPrompts().getAuditor();
     }
 
     public String audit(String playerMessage) {
+        if (!enabled) {
+            return null;
+        }
+
         if (playerMessage == null || playerMessage.isBlank()) {
             return null;
         }

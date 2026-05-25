@@ -166,6 +166,33 @@ public class AdminController {
         return result;
     }
 
+    @GetMapping("/auditor/status")
+    public Map<String, Object> getAuditorStatus(@RequestHeader("X-Admin-Token") String token) {
+        requireAuth(token);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("enabled", adminService.isAuditorEnabled());
+        return result;
+    }
+
+    @PutMapping("/auditor/status")
+    public Map<String, Object> setAuditorStatus(@RequestHeader("X-Admin-Token") String token,
+                                                 @RequestBody Map<String, Object> body) {
+        requireAuth(token);
+        Object enabledObj = body.get("enabled");
+        if (enabledObj == null) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", false);
+            result.put("message", "Missing 'enabled' field");
+            return result;
+        }
+        boolean enabled = Boolean.parseBoolean(enabledObj.toString());
+        adminService.setAuditorEnabled(enabled);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("success", true);
+        result.put("enabled", enabled);
+        return result;
+    }
+
     @PostMapping("/restart")
     public Map<String, Object> restart(@RequestHeader("X-Admin-Token") String token) {
         requireAuth(token);
