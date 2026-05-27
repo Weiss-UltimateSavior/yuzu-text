@@ -19,4 +19,7 @@ public interface GameSessionRepository extends JpaRepository<GameSessionEntity, 
     Double avgTurn();
 
     long countByEnded(boolean ended);
+
+    @Query("SELECT COUNT(e) FROM GameSessionEntity e WHERE e.updatedAt >= :since AND e.ended = false")
+    long countActiveSince(@Param("since") Instant since);
 }

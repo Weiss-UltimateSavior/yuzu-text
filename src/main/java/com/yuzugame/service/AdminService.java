@@ -125,11 +125,14 @@ public class AdminService {
         long today = sessionRepo.countSince(todayStart);
         Instant monthStart = LocalDate.now().withDayOfMonth(1).atStartOfDay(ZoneId.systemDefault()).toInstant();
         long thisMonth = sessionRepo.countSince(monthStart);
+        Instant oneHourAgo = Instant.now().minusSeconds(3600);
+        long activePlayers = sessionRepo.countActiveSince(oneHourAgo);
 
         Map<String, Object> stats = new LinkedHashMap<>();
         stats.put("totalPlayers", total);
         stats.put("todayPlayers", today);
         stats.put("thisMonthPlayers", thisMonth);
+        stats.put("activePlayers", activePlayers);
         return stats;
     }
 
