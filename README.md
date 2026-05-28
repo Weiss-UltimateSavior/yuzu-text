@@ -779,14 +779,17 @@ JPA 配置 `ddl-auto: update`，首次启动时自动创建所需表：
 
 ## 游戏截图
 
-![地图探索1](docs/screenshots/m1.png)
-![地图探索2](docs/screenshots/m2.png)
-![地图探索3](docs/screenshots/m3.png)
-![地图探索4](docs/screenshots/m4.png)
-![谜题交互1](docs/screenshots/p1.png)
-![谜题交互2](docs/screenshots/p2.png)
-![谜题交互3](docs/screenshots/p3.png)
-![谜题交互4](docs/screenshots/p4.png)
+<table>
+<tr>
+<td><img src="docs/screenshots/m1.png" width="22%"/><img src="docs/screenshots/m2.png" width="22%"/><img src="docs/screenshots/m3.png" width="22%"/><img src="docs/screenshots/m4.png" width="22%"/></td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td><img src="docs/screenshots/p1.png" width="22%"/><img src="docs/screenshots/p2.png" width="22%"/><img src="docs/screenshots/p3.png" width="22%"/><img src="docs/screenshots/p4.png" width="22%"/></td>
+</tr>
+</table>
 
 ***
 
