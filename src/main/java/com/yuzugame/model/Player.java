@@ -1,6 +1,7 @@
 package com.yuzugame.model;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -38,7 +39,17 @@ public class Player {
     public void setAffection(int affection) { this.affection = Math.max(0, Math.min(100, affection)); }
     public void addAffection(int delta) { setAffection(affection + delta); }
 
-    public List<String> getInventory() { return inventory; }
+    public void copyFrom(Player other) {
+        if (other == null) return;
+        this.sanity = other.sanity;
+        this.revelation = other.revelation;
+        this.affection = other.affection;
+        this.inventory.clear();
+        this.inventory.addAll(other.inventory);
+    }
+
+    public List<String> getInventory() { return Collections.unmodifiableList(inventory); }
+    public void setInventory(List<String> inventory) { this.inventory.clear(); this.inventory.addAll(inventory); }
     public boolean hasItem(String itemId) { return inventory.contains(itemId); }
     public void addItem(String itemId) { if (!inventory.contains(itemId)) inventory.add(itemId); }
     public void removeItem(String itemId) { inventory.remove(itemId); }

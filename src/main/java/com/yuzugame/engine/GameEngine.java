@@ -72,6 +72,7 @@ public class GameEngine {
         this.dataLoader = dataLoader;
         this.inputAuditor = inputAuditor;
         this.objectMapper = objectMapper;
+        this.dataLoader.setGameEngine(this);
     }
 
     private GameConfig gameConfig() {
@@ -80,23 +81,32 @@ public class GameEngine {
 
     private Pattern exploreKeywords() {
         if (exploreKeywordsPattern == null) {
-            exploreKeywordsPattern = Pattern.compile(gameConfig().getExploreKeywords());
+            String kw = gameConfig().getExploreKeywords();
+            exploreKeywordsPattern = Pattern.compile(kw != null ? kw : "探索|查看|观察|检查|搜索");
         }
         return exploreKeywordsPattern;
     }
 
     private Pattern moveKeywords() {
         if (moveKeywordsPattern == null) {
-            moveKeywordsPattern = Pattern.compile(gameConfig().getMoveKeywords());
+            String kw = gameConfig().getMoveKeywords();
+            moveKeywordsPattern = Pattern.compile(kw != null ? kw : "离开|前进|走|移动|前往");
         }
         return moveKeywordsPattern;
     }
 
     private Pattern npcMention() {
         if (npcMentionPattern == null) {
-            npcMentionPattern = Pattern.compile(gameConfig().getNpcMentionPattern());
+            String kw = gameConfig().getNpcMentionPattern();
+            npcMentionPattern = Pattern.compile(kw != null ? kw : "@(.+?)\\s+(.+)");
         }
         return npcMentionPattern;
+    }
+
+    public void clearPatternCache() {
+        exploreKeywordsPattern = null;
+        moveKeywordsPattern = null;
+        npcMentionPattern = null;
     }
 
     private String outputPrefix(String key) {
@@ -142,10 +152,13 @@ public class GameEngine {
         MapConfig currentMap = dataLoader.getMap(session.getCurrentMapId());
         if (currentMap == null) {
             log.error("Invalid mapId: {}, attempting recovery", session.getCurrentMapId());
-            for (StoryConfig.ChapterDef ch : story.getChapters()) {
-                if (ch.getId().equals(session.getCurrentChapter())) {
-                    session.setCurrentMapId(ch.getMapId());
-                    break;
+            List<StoryConfig.ChapterDef> chapters = story.getChapters();
+            if (chapters != null) {
+                for (StoryConfig.ChapterDef ch : chapters) {
+                    if (ch.getId() != null && ch.getId().equals(session.getCurrentChapter())) {
+                        session.setCurrentMapId(ch.getMapId());
+                        break;
+                    }
                 }
             }
             currentMap = dataLoader.getMap(session.getCurrentMapId());
@@ -224,15 +237,18 @@ public class GameEngine {
                 // 谜题兜底激活：在同一地图停留>=5回合且无活跃谜题时，自动激活第一个未解决谜题
                 // 阈值调整：修改 getMapTurns() >= 5 中的数字
                 if (session.getActivePuzzleId() == null && session.getMapTurns() >= gameConfig().getFallbackPuzzleActivationTurns()) {
-                    for (String pId : currentMap.getPuzzles()) {
-                        if (!session.isPuzzleSolved(pId) && !session.getFailedPuzzles().contains(pId)) {
-                            session.setActivePuzzleId(pId);
-                            PuzzleConfig puzzle = dataLoader.getPuzzle(pId);
-                            if (puzzle != null) {
-                                outputs.add(outputPrefix("system") + "谜题已激活：" + puzzle.getName() + " — " + puzzle.getDescription());
+                    List<String> mapPuzzles = currentMap.getPuzzles();
+                    if (mapPuzzles != null) {
+                        for (String pId : mapPuzzles) {
+                            if (!session.isPuzzleSolved(pId) && !session.getFailedPuzzles().contains(pId)) {
+                                session.setActivePuzzleId(pId);
+                                PuzzleConfig puzzle = dataLoader.getPuzzle(pId);
+                                if (puzzle != null) {
+                                    outputs.add(outputPrefix("system") + "谜题已激活：" + puzzle.getName() + " — " + puzzle.getDescription());
+                                }
+                                log.debug("Fallback puzzle activation at turn {}: {}", session.getTurn(), pId);
+                                break;
                             }
-                            log.debug("Fallback puzzle activation at turn {}: {}", session.getTurn(), pId);
-                            break;
                         }
                     }
                 }
@@ -292,12 +308,16 @@ public class GameEngine {
 
                         if (prevCount == gameConfig().getNpcGiftDialogueThreshold() - 1
                                 && session.getPlayer().getInventory().size() == inventorySizeBefore) {
-                            String giftId = gameConfig().getNpcGiftItemIdTemplate().replace("{npcId}", npc.getId());
-                            String giftName = gameConfig().getNpcGiftNameTemplate().replace("{npcName}", npc.getName());
-                            session.getPlayer().addItem(giftId);
-                            session.registerDynamicItemName(giftId, giftName);
-                            outputs.add(outputPrefix("system") + "获得了「" + giftName + "」");
-                            log.info("[NPC:{}] Auto-gave item {} ({}) on {}th dialogue (AI did not give item)", npc.getId(), giftId, giftName, gameConfig().getNpcGiftDialogueThreshold());
+                            String giftIdTemplate = gameConfig().getNpcGiftItemIdTemplate();
+                            String giftNameTemplate = gameConfig().getNpcGiftNameTemplate();
+                            if (giftIdTemplate != null && giftNameTemplate != null) {
+                                String giftId = giftIdTemplate.replace("{npcId}", npc.getId());
+                                String giftName = giftNameTemplate.replace("{npcName}", npc.getName());
+                                session.getPlayer().addItem(giftId);
+                                session.registerDynamicItemName(giftId, giftName);
+                                outputs.add(outputPrefix("system") + "获得了「" + giftName + "」");
+                                log.info("[NPC:{}] Auto-gave item {} ({}) on {}th dialogue (AI did not give item)", npc.getId(), giftId, giftName, gameConfig().getNpcGiftDialogueThreshold());
+                            }
                         }
 
                         session.getPlayer().addRevelation(gameConfig().getNpcDialogueRevelationBonus());
@@ -332,13 +352,16 @@ public class GameEngine {
                 // 调整方式：修改下方 switch 表达式中的数值
                 if (session.isPuzzleSolved(puzzle.getId())) {
                     session.clearPuzzleMemory(puzzle.getId());
-                    int revelationReward = gameConfig().getPuzzleRewards().getRevelationReward(puzzle.getDifficulty());
-                    session.getPlayer().addRevelation(revelationReward);
-                    int sanityReward = gameConfig().getPuzzleRewards().getSanityReward(puzzle.getDifficulty());
-                    session.getPlayer().addSanity(sanityReward);
-                    log.debug("Puzzle solved rewards: revelation +{} -> now {}, sanity +{} -> now {}",
-                            revelationReward, session.getPlayer().getRevelation(),
-                            sanityReward, session.getPlayer().getSanity());
+                    GameConfig.PuzzleRewards rewards = gameConfig().getPuzzleRewards();
+                    if (rewards != null) {
+                        int revelationReward = rewards.getRevelationReward(puzzle.getDifficulty());
+                        session.getPlayer().addRevelation(revelationReward);
+                        int sanityReward = rewards.getSanityReward(puzzle.getDifficulty());
+                        session.getPlayer().addSanity(sanityReward);
+                        log.debug("Puzzle solved rewards: revelation +{} -> now {}, sanity +{} -> now {}",
+                                revelationReward, session.getPlayer().getRevelation(),
+                                sanityReward, session.getPlayer().getSanity());
+                    }
                 }
             }
         }
@@ -382,7 +405,8 @@ public class GameEngine {
 
         if (!session.isExitUnlocked() && shouldCheckMapTransition(session, currentMap)) {
             session.setExitUnlocked(true);
-            outputs.add(outputPrefix("system") + "出口已开启 — " + currentMap.getExitHint());
+                String exitHint = currentMap.getExitHint();
+                outputs.add(outputPrefix("system") + "出口已开启" + (exitHint != null ? " — " + exitHint : ""));
         }
 
         if (session.isExitUnlocked() && moveKeywords().matcher(playerMessage).find()
@@ -397,7 +421,7 @@ public class GameEngine {
             outputs.removeIf(o -> o.startsWith(outputPrefix("environment")));
             MapConfig fromMap = dataLoader.getMap(mapIdBeforeTransition);
             if (currentMap != null) {
-                if (!currentMap.getChapter().equals(chapterBeforeTransition)) {
+                if (!Objects.equals(currentMap.getChapter(), chapterBeforeTransition)) {
                     int chapterReward = gameConfig().getChapterRevelationReward(currentMap.getChapter());
                     session.getPlayer().addRevelation(chapterReward);
                     log.debug("Chapter advancement revelation: +{} -> now {}", chapterReward, session.getPlayer().getRevelation());
@@ -421,18 +445,21 @@ public class GameEngine {
         // 阈值调整：修改下方 thresholds 数组，如 {60, 30, 10} 表示理智≤60/≤30/≤10时各触发一次
         int sanity = session.getPlayer().getSanity();
         boolean sanityWarningTriggered = false;
-        for (int threshold : gameConfig().getSanityWarningThresholds()) {
-            sanity = session.getPlayer().getSanity();
-            if (sanity <= threshold && !session.getTriggeredSanityWarnings().contains(threshold)) {
-                session.getTriggeredSanityWarnings().add(threshold);
-                sanityWarningTriggered = true;
-                String warning = director.sanityWarning(session, currentMap, story);
-                String warnStripped = stateManager.stripInternal(warning);
-                if (!warnStripped.isBlank()) {
-                    outputs.add(outputPrefix("innerVoice") + warnStripped);
-                    session.addChatMessage(new GameSession.ChatMessage("DIRECTOR_AI", null, warnStripped));
+        List<Integer> thresholds = gameConfig().getSanityWarningThresholds();
+        if (thresholds != null) {
+            for (int threshold : thresholds) {
+                sanity = session.getPlayer().getSanity();
+                if (sanity <= threshold && !session.getTriggeredSanityWarnings().contains(threshold)) {
+                    session.triggerSanityWarning(threshold);
+                    sanityWarningTriggered = true;
+                    String warning = director.sanityWarning(session, currentMap, story);
+                    String warnStripped = stateManager.stripInternal(warning);
+                    if (!warnStripped.isBlank()) {
+                        outputs.add(outputPrefix("innerVoice") + warnStripped);
+                        session.addChatMessage(new GameSession.ChatMessage("DIRECTOR_AI", null, warnStripped));
+                    }
+                    stateManager.applyControlTags(session, warning, AgentType.DIRECTOR);
                 }
-                stateManager.applyControlTags(session, warning, AgentType.DIRECTOR);
             }
         }
 
@@ -580,8 +607,9 @@ public class GameEngine {
      * @return 匹配的NPC配置，未找到返回null
      */
     private NpcConfig findNpcByName(String name) {
+        if (name == null) return null;
         for (NpcConfig npc : dataLoader.getNpcs()) {
-            if (npc.getName().equals(name)) {
+            if (name.equals(npc.getName())) {
                 return npc;
             }
         }
@@ -628,10 +656,9 @@ public class GameEngine {
         String yuzuEndingStripped = stateManager.stripInternal(yuzuEnding);
         outputs.add(outputPrefix("protagonistEnding") + yuzuEndingStripped);
 
-        session.setEnded(true);
-        session.setEndingType(endingType);
         stateManager.applyControlTags(session, ending, AgentType.DIRECTOR);
-        // 清理该会话的所有谜题AI记忆
+        session.setEndingType(endingType);
+        session.setEnded(true);
         session.clearAllPuzzleMemory();
     }
 
@@ -659,7 +686,7 @@ public class GameEngine {
     }
 
     private void copySessionState(GameSession src, GameSession dst) {
-        dst.setPlayer(src.getPlayer());
+        dst.getPlayer().copyFrom(src.getPlayer());
         dst.setCurrentMapId(src.getCurrentMapId());
         dst.setCurrentChapter(src.getCurrentChapter());
         dst.setTurn(src.getTurn());
@@ -670,35 +697,25 @@ public class GameEngine {
         dst.setMapEntryTurn(src.getMapEntryTurn());
         dst.setCurrentArea(src.getCurrentArea());
 
-        dst.getSolvedPuzzles().clear();
-        dst.getSolvedPuzzles().addAll(src.getSolvedPuzzles());
-        dst.getFailedPuzzles().clear();
-        dst.getFailedPuzzles().addAll(src.getFailedPuzzles());
-        dst.getUnlockedNpcs().clear();
-        dst.getUnlockedNpcs().addAll(src.getUnlockedNpcs());
-        dst.getKilledNpcs().clear();
-        dst.getKilledNpcs().addAll(src.getKilledNpcs());
-        dst.getFoundItems().clear();
-        dst.getFoundItems().addAll(src.getFoundItems());
-        dst.getTriggeredSanityWarnings().clear();
-        dst.getTriggeredSanityWarnings().addAll(src.getTriggeredSanityWarnings());
-        dst.getYuzuInventory().clear();
-        dst.getYuzuInventory().addAll(src.getYuzuInventory());
-        dst.getRevivedNpcs().clear();
-        dst.getRevivedNpcs().addAll(src.getRevivedNpcs());
+        dst.setSolvedPuzzles(new HashSet<>(src.getSolvedPuzzles()));
+        dst.setFailedPuzzles(new HashSet<>(src.getFailedPuzzles()));
+        dst.setUnlockedNpcs(new HashSet<>(src.getUnlockedNpcs()));
+        dst.setKilledNpcs(new HashSet<>(src.getKilledNpcs()));
+        dst.setFoundItems(new HashSet<>(src.getFoundItems()));
+        dst.setTriggeredSanityWarnings(new HashSet<>(src.getTriggeredSanityWarnings()));
+        dst.setYuzuInventory(new ArrayList<>(src.getYuzuInventory()));
+        dst.setRevivedNpcs(new HashSet<>(src.getRevivedNpcs()));
 
-        dst.getPuzzleAttempts().clear();
-        dst.getPuzzleAttempts().putAll(src.getPuzzleAttempts());
-        dst.getNpcDialogueCounts().clear();
-        dst.getNpcDialogueCounts().putAll(src.getNpcDialogueCounts());
-        dst.getDynamicItemNames().clear();
-        dst.getDynamicItemNames().putAll(src.getDynamicItemNames());
-        dst.getUsedRedemptionCodes().clear();
-        dst.getUsedRedemptionCodes().putAll(src.getUsedRedemptionCodes());
-        dst.getPuzzleMemory().clear();
-        dst.getPuzzleMemory().putAll(src.getPuzzleMemory());
-        dst.getChatHistory().clear();
-        dst.getChatHistory().addAll(src.getChatHistory());
+        dst.setPuzzleAttempts(new HashMap<>(src.getPuzzleAttempts()));
+        dst.setNpcDialogueCounts(new HashMap<>(src.getNpcDialogueCounts()));
+        dst.setDynamicItemNames(new HashMap<>(src.getDynamicItemNames()));
+        dst.setUsedRedemptionCodes(new HashMap<>(src.getUsedRedemptionCodes()));
+        Map<String, List<PuzzleMemoryEntry>> pmCopy = new HashMap<>();
+        for (var entry : src.getPuzzleMemory().entrySet()) {
+            pmCopy.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+        }
+        dst.setPuzzleMemory(pmCopy);
+        dst.setChatHistory(new ArrayList<>(src.getChatHistory()));
 
         dst.setEnded(src.isEnded());
         dst.setEndingType(src.getEndingType());

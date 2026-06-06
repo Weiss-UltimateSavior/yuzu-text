@@ -7,16 +7,14 @@ import com.yuzugame.repository.JsonConverters.*;
 import jakarta.persistence.*;
 
 import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 @Entity
 @Table(name = "game_sessions")
 public class GameSessionEntity {
 
     @Id
-    @Column(length = 16)
+    @Column(length = 32)
     private String sessionId;
 
     @Convert(converter = PlayerConverter.class)
@@ -135,27 +133,26 @@ public class GameSessionEntity {
         e.exitUnlocked = session.isExitUnlocked();
         e.mapEntryTurn = session.getMapEntryTurn();
         e.currentArea = session.getCurrentArea();
-        e.solvedPuzzles = session.getSolvedPuzzles();
-        e.failedPuzzles = session.getFailedPuzzles();
-        e.unlockedNpcs = session.getUnlockedNpcs();
-        e.killedNpcs = session.getKilledNpcs();
-        e.foundItems = session.getFoundItems();
-        e.triggeredSanityWarnings = session.getTriggeredSanityWarnings();
-        e.yuzuInventory = session.getYuzuInventory();
-        e.revivedNpcs = session.getRevivedNpcs();
-        e.puzzleAttempts = session.getPuzzleAttempts();
-        e.npcDialogueCounts = session.getNpcDialogueCounts();
-        e.dynamicItemNames = session.getDynamicItemNames();
-        e.usedRedemptionCodes = session.getUsedRedemptionCodes();
-        e.puzzleMemory = session.getPuzzleMemory();
-        e.chatHistory = session.getChatHistory();
+        e.solvedPuzzles = session.getSolvedPuzzles() != null ? new HashSet<>(session.getSolvedPuzzles()) : new HashSet<>();
+        e.failedPuzzles = session.getFailedPuzzles() != null ? new HashSet<>(session.getFailedPuzzles()) : new HashSet<>();
+        e.unlockedNpcs = session.getUnlockedNpcs() != null ? new HashSet<>(session.getUnlockedNpcs()) : new HashSet<>();
+        e.killedNpcs = session.getKilledNpcs() != null ? new HashSet<>(session.getKilledNpcs()) : new HashSet<>();
+        e.foundItems = session.getFoundItems() != null ? new HashSet<>(session.getFoundItems()) : new HashSet<>();
+        e.triggeredSanityWarnings = session.getTriggeredSanityWarnings() != null ? new HashSet<>(session.getTriggeredSanityWarnings()) : new HashSet<>();
+        e.yuzuInventory = session.getYuzuInventory() != null ? new ArrayList<>(session.getYuzuInventory()) : new ArrayList<>();
+        e.revivedNpcs = session.getRevivedNpcs() != null ? new HashSet<>(session.getRevivedNpcs()) : new HashSet<>();
+        e.puzzleAttempts = session.getPuzzleAttempts() != null ? new HashMap<>(session.getPuzzleAttempts()) : new HashMap<>();
+        e.npcDialogueCounts = session.getNpcDialogueCounts() != null ? new HashMap<>(session.getNpcDialogueCounts()) : new HashMap<>();
+        e.dynamicItemNames = session.getDynamicItemNames() != null ? new HashMap<>(session.getDynamicItemNames()) : new HashMap<>();
+        e.usedRedemptionCodes = session.getUsedRedemptionCodes() != null ? new HashMap<>(session.getUsedRedemptionCodes()) : new HashMap<>();
+        e.puzzleMemory = session.getPuzzleMemory() != null ? new HashMap<>(session.getPuzzleMemory()) : new HashMap<>();
+        e.chatHistory = session.getChatHistory() != null ? new ArrayList<>(session.getChatHistory()) : new ArrayList<>();
         e.ended = session.isEnded();
         e.endingType = session.getEndingType();
         e.customLlmBaseUrl = session.getCustomLlmBaseUrl();
         e.customLlmApiKey = session.getCustomLlmApiKey();
         e.customLlmModel = session.getCustomLlmModel();
         e.updatedAt = Instant.now();
-        if (e.createdAt == null) e.createdAt = Instant.now();
         return e;
     }
 
@@ -172,20 +169,26 @@ public class GameSessionEntity {
         s.setExitUnlocked(exitUnlocked);
         s.setMapEntryTurn(mapEntryTurn);
         s.setCurrentArea(currentArea);
-        s.getSolvedPuzzles().addAll(solvedPuzzles != null ? solvedPuzzles : Set.of());
-        s.getFailedPuzzles().addAll(failedPuzzles != null ? failedPuzzles : Set.of());
-        s.getUnlockedNpcs().addAll(unlockedNpcs != null ? unlockedNpcs : Set.of());
-        s.getKilledNpcs().addAll(killedNpcs != null ? killedNpcs : Set.of());
-        s.getFoundItems().addAll(foundItems != null ? foundItems : Set.of());
-        s.getTriggeredSanityWarnings().addAll(triggeredSanityWarnings != null ? triggeredSanityWarnings : Set.of());
-        s.getYuzuInventory().addAll(yuzuInventory != null ? yuzuInventory : List.of());
-        s.getRevivedNpcs().addAll(revivedNpcs != null ? revivedNpcs : Set.of());
-        if (puzzleAttempts != null) s.getPuzzleAttempts().putAll(puzzleAttempts);
-        if (npcDialogueCounts != null) s.getNpcDialogueCounts().putAll(npcDialogueCounts);
-        if (dynamicItemNames != null) s.getDynamicItemNames().putAll(dynamicItemNames);
-        if (usedRedemptionCodes != null) s.getUsedRedemptionCodes().putAll(usedRedemptionCodes);
-        if (puzzleMemory != null) s.getPuzzleMemory().putAll(puzzleMemory);
-        if (chatHistory != null) s.getChatHistory().addAll(chatHistory);
+        s.setSolvedPuzzles(solvedPuzzles != null ? new HashSet<>(solvedPuzzles) : Set.of());
+        s.setFailedPuzzles(failedPuzzles != null ? new HashSet<>(failedPuzzles) : Set.of());
+        s.setUnlockedNpcs(unlockedNpcs != null ? new HashSet<>(unlockedNpcs) : Set.of());
+        s.setKilledNpcs(killedNpcs != null ? new HashSet<>(killedNpcs) : Set.of());
+        s.setFoundItems(foundItems != null ? new HashSet<>(foundItems) : Set.of());
+        s.setTriggeredSanityWarnings(triggeredSanityWarnings != null ? new HashSet<>(triggeredSanityWarnings) : Set.of());
+        s.setYuzuInventory(yuzuInventory != null ? new ArrayList<>(yuzuInventory) : List.of());
+        s.setRevivedNpcs(revivedNpcs != null ? new HashSet<>(revivedNpcs) : Set.of());
+        s.setPuzzleAttempts(puzzleAttempts != null ? new HashMap<>(puzzleAttempts) : Map.of());
+        s.setNpcDialogueCounts(npcDialogueCounts != null ? new HashMap<>(npcDialogueCounts) : Map.of());
+        s.setDynamicItemNames(dynamicItemNames != null ? new HashMap<>(dynamicItemNames) : Map.of());
+        s.setUsedRedemptionCodes(usedRedemptionCodes != null ? new HashMap<>(usedRedemptionCodes) : Map.of());
+        Map<String, List<PuzzleMemoryEntry>> pmCopy = new HashMap<>();
+        if (puzzleMemory != null) {
+            for (Map.Entry<String, List<PuzzleMemoryEntry>> entry : puzzleMemory.entrySet()) {
+                pmCopy.put(entry.getKey(), entry.getValue() != null ? new ArrayList<>(entry.getValue()) : new ArrayList<>());
+            }
+        }
+        s.setPuzzleMemory(pmCopy);
+        s.setChatHistory(chatHistory != null ? new ArrayList<>(chatHistory) : List.of());
         s.setEnded(ended);
         s.setEndingType(endingType);
         s.setCustomLlmBaseUrl(customLlmBaseUrl);
@@ -208,5 +211,6 @@ public class GameSessionEntity {
     public String getSessionId() { return sessionId; }
     public void setSessionId(String sessionId) { this.sessionId = sessionId; }
     public Instant getCreatedAt() { return createdAt; }
+    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 }

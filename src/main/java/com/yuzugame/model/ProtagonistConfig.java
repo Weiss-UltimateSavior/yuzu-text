@@ -1,5 +1,7 @@
 package com.yuzugame.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 /**
  * 主角（柚子）配置 —— 定义核心同伴角色的属性和行为规则。
  *
@@ -15,6 +17,7 @@ package com.yuzugame.model;
  *
  * @see com.yuzugame.agent.ProtagonistAI
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class ProtagonistConfig {
     private String name;
     private String nameEn;

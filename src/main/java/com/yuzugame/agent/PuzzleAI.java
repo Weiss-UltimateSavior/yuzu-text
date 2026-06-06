@@ -33,20 +33,15 @@ public class PuzzleAI {
         return llm.chat(systemPrompt, userMessage, history);
     }
 
-    public void clearSessionMemory(String sessionId) {
-        // no-op: memory is now stored in GameSession, cleared via clearAllPuzzleMemory()
-    }
-
-    public void clearPuzzleMemory(String sessionId, String puzzleId) {
-        // no-op: memory is now stored in GameSession, cleared via GameSession.clearPuzzleMemory()
-    }
-
     public String handle(GameSession session, PuzzleConfig puzzle, MapConfig currentMap, String playerMessage) {
+        if (puzzle == null || currentMap == null) return "";
         String prompt = buildPrompt(session, puzzle, currentMap);
 
         List<Map<String, String>> history = new ArrayList<>();
         for (PuzzleMemoryEntry entry : session.getPuzzleMemoryEntries(puzzle.getId())) {
-            history.add(Map.of("role", entry.role(), "content", entry.content()));
+            if (entry.role() != null && entry.content() != null) {
+                history.add(Map.of("role", entry.role(), "content", entry.content()));
+            }
         }
 
         if (history.isEmpty()) {
@@ -65,15 +60,16 @@ public class PuzzleAI {
                     case "PLAYER" -> "";
                     default -> "";
                 };
-                if (!msg.content().isBlank()) {
-                    history.add(Map.of("role", role, "content", label + msg.content()));
+                String content = msg.content();
+                if (content != null && !content.isBlank()) {
+                    history.add(Map.of("role", role, "content", label + content));
                 }
             }
         }
 
-        String response = chatWithSession(session, prompt, playerMessage, history.isEmpty() ? null : history);
+        String response = chatWithSession(session, prompt, nullToEmpty(playerMessage), history.isEmpty() ? null : history);
 
-        session.addPuzzleMemoryEntry(puzzle.getId(), new PuzzleMemoryEntry("user", playerMessage));
+        session.addPuzzleMemoryEntry(puzzle.getId(), new PuzzleMemoryEntry("user", nullToEmpty(playerMessage)));
         session.addPuzzleMemoryEntry(puzzle.getId(), new PuzzleMemoryEntry("assistant", response));
 
         int maxRounds = gameConfig().getMaxPuzzleMemoryRounds();
@@ -83,34 +79,36 @@ public class PuzzleAI {
     }
 
     private String buildPrompt(GameSession session, PuzzleConfig puzzle, MapConfig currentMap) {
-        StringBuilder sb = new StringBuilder(puzzle.getSystemPrompt());
+        StringBuilder sb = new StringBuilder();
+        appendNonNull(sb, puzzle.getSystemPrompt());
 
         sb.append("\n\n=== 场景信息 ===\n");
-        sb.append("地图: ").append(currentMap.getName()).append("\n");
-        sb.append("章节: ").append(currentMap.getChapterName()).append("\n");
-        sb.append("气氛: ").append(currentMap.getAtmosphere()).append("\n");
+        sb.append("地图: ").append(nullToEmpty(currentMap.getName())).append("\n");
+        sb.append("章节: ").append(nullToEmpty(currentMap.getChapterName())).append("\n");
+        sb.append("气氛: ").append(nullToEmpty(currentMap.getAtmosphere())).append("\n");
         sb.append("当前回合: ").append(session.getTurn()).append(" (本地图内: ").append(session.getMapTurns()).append(")\n");
         if (session.isPuzzleSolved(puzzle.getId())) {
-            sb.append("出口: ").append(currentMap.getExitHint()).append("\n");
+            sb.append("出口: ").append(nullToEmpty(currentMap.getExitHint())).append("\n");
         }
 
-        if (currentMap.getAreas() != null && !currentMap.getAreas().isEmpty()) {
+        List<Map<String, String>> areas = currentMap.getAreas();
+        if (areas != null && !areas.isEmpty()) {
             sb.append("\n=== 区域（与地图AI一致） ===\n");
             int idx = 1;
-            for (Map<String, String> area : currentMap.getAreas()) {
-                sb.append(idx++).append(". ").append(area.get("name")).append("：").append(area.get("description")).append("\n");
+            for (Map<String, String> area : areas) {
+                sb.append(idx++).append(". ").append(nullToEmpty(area.get("name"))).append("：").append(nullToEmpty(area.get("description"))).append("\n");
             }
         }
 
-        String stateHeader = prompts().getStateHeader()
-                .replace("{puzzleName}", puzzle.getName())
-                .replace("{difficulty}", String.valueOf(puzzle.getDifficulty()))
-                .replace("{description}", puzzle.getDescription())
-                .replace("{solutionCriteria}", puzzle.getSolutionCriteria())
-                .replace("{maxAttempts}", String.valueOf(puzzle.getMaxAttempts()))
-                .replace("{attempts}", String.valueOf(session.getPuzzleAttempts(puzzle.getId())))
-                .replace("{failSanityPenalty}", String.valueOf(puzzle.getFailSanityPenalty()))
-                .replace("{failNarrative}", puzzle.getFailNarrative());
+        String stateHeader = safeReplace(prompts().getStateHeader(),
+                "{puzzleName}", nullToEmpty(puzzle.getName()),
+                "{difficulty}", String.valueOf(puzzle.getDifficulty()),
+                "{description}", nullToEmpty(puzzle.getDescription()),
+                "{solutionCriteria}", nullToEmpty(puzzle.getSolutionCriteria()),
+                "{maxAttempts}", String.valueOf(puzzle.getMaxAttempts()),
+                "{attempts}", String.valueOf(session.getPuzzleAttempts(puzzle.getId())),
+                "{failSanityPenalty}", String.valueOf(puzzle.getFailSanityPenalty()),
+                "{failNarrative}", nullToEmpty(puzzle.getFailNarrative()));
         sb.append("\n\n").append(stateHeader).append("\n");
 
         if (session.getCurrentArea() != null) {
@@ -119,9 +117,11 @@ public class PuzzleAI {
         }
 
         if (puzzle.getRequiredItemId() != null) {
-            String itemStatus = prompts().getRequiredItemTemplate()
-                    .replace("{itemId}", puzzle.getRequiredItemId())
-                    .replace("{status}", session.getPlayer().hasItem(puzzle.getRequiredItemId()) ? prompts().getOwnedLabel() : prompts().getMissingLabel());
+            String ownedLabel = prompts().getOwnedLabel();
+            String missingLabel = prompts().getMissingLabel();
+            String itemStatus = safeReplace(prompts().getRequiredItemTemplate(),
+                    "{itemId}", puzzle.getRequiredItemId(),
+                    "{status}", session.getPlayer().hasItem(puzzle.getRequiredItemId()) ? nullToEmpty(ownedLabel) : nullToEmpty(missingLabel));
             sb.append(itemStatus).append("\n");
         }
 
@@ -133,16 +133,17 @@ public class PuzzleAI {
             }
         }
 
-        sb.append("\n").append(prompts().getTurnAndSanityTemplate()
-                .replace("{turn}", String.valueOf(session.getTurn()))
-                .replace("{sanity}", String.valueOf(session.getPlayer().getSanity()))).append("\n");
+        String turnAndSanity = safeReplace(prompts().getTurnAndSanityTemplate(),
+                "{turn}", String.valueOf(session.getTurn()),
+                "{sanity}", String.valueOf(session.getPlayer().getSanity()));
+        appendSection(sb, turnAndSanity);
 
         int attempts = session.getPuzzleAttempts(puzzle.getId());
         if (attempts >= puzzle.getMaxAttempts()) {
-            String failNotice = prompts().getMaxAttemptsReachedTemplate()
-                    .replace("{puzzleId}", puzzle.getId())
-                    .replace("{failSanityPenalty}", String.valueOf(puzzle.getFailSanityPenalty()));
-            sb.append("\n").append(failNotice).append("\n");
+            String failNotice = safeReplace(prompts().getMaxAttemptsReachedTemplate(),
+                    "{puzzleId}", nullToEmpty(puzzle.getId()),
+                    "{failSanityPenalty}", String.valueOf(puzzle.getFailSanityPenalty()));
+            appendSection(sb, failNotice);
         }
 
         int minRounds = gameConfig().getPuzzleMinRoundsBase() + puzzle.getDifficulty();
@@ -151,53 +152,62 @@ public class PuzzleAI {
                 .mapToInt(e -> 1)
                 .sum();
 
-        String rules = prompts().getSolvingRules()
-                .replace("{minRounds}", String.valueOf(minRounds))
-                .replace("{difficulty}", String.valueOf(puzzle.getDifficulty()))
-                .replace("{currentRounds}", String.valueOf(currentRounds))
-                .replace("{maxAttempts}", String.valueOf(puzzle.getMaxAttempts()))
-                .replace("{failSanityPenalty}", String.valueOf(puzzle.getFailSanityPenalty()));
-        sb.append("\n").append(rules).append("\n");
+        String rules = safeReplace(prompts().getSolvingRules(),
+                "{minRounds}", String.valueOf(minRounds),
+                "{difficulty}", String.valueOf(puzzle.getDifficulty()),
+                "{currentRounds}", String.valueOf(currentRounds),
+                "{maxAttempts}", String.valueOf(puzzle.getMaxAttempts()),
+                "{failSanityPenalty}", String.valueOf(puzzle.getFailSanityPenalty()));
+        appendSection(sb, rules);
 
-        sb.append("\n").append(prompts().getAvailableTagsTemplate()
-                .replace("{puzzleId}", puzzle.getId()));
+        String availableTags = safeReplace(prompts().getAvailableTagsTemplate(),
+                "{puzzleId}", nullToEmpty(puzzle.getId()));
+        sb.append("\n").append(availableTags);
         if (puzzle.getRequiredItemId() != null) {
-            sb.append(prompts().getItemTakeTagTemplate()
-                    .replace("{itemId}", puzzle.getRequiredItemId()));
+            String itemTakeTag = safeReplace(prompts().getItemTakeTagTemplate(),
+                    "{itemId}", puzzle.getRequiredItemId());
+            sb.append(itemTakeTag);
         }
 
-        if (gameConfig().getArchiveMapId().equals(currentMap.getId())) {
-            sb.append("\n").append(dataLoader.getPrompts().getMap().getArchiveSpecialRule()).append("\n");
+        String archiveMapId = gameConfig().getArchiveMapId();
+        if (archiveMapId != null && archiveMapId.equals(currentMap.getId())) {
+            String archiveRule = dataLoader.getPrompts().getMap().getArchiveSpecialRule();
+            appendSection(sb, archiveRule);
         }
 
-        List<String> stillLocked = new ArrayList<>(currentMap.getNpcIds());
+        List<String> mapNpcIds = currentMap.getNpcIds() != null ? currentMap.getNpcIds() : Collections.emptyList();
+        List<String> stillLocked = new ArrayList<>(mapNpcIds);
         stillLocked.removeAll(session.getUnlockedNpcs());
         stillLocked.removeAll(session.getKilledNpcs());
         if (!stillLocked.isEmpty()) {
             String npcUnlock = prompts().getNpcUnlockSection();
-            StringBuilder npcList = new StringBuilder();
-            for (String id : stillLocked) {
-                NpcConfig npcCfg = dataLoader.getNpc(id);
-                if (npcCfg != null) {
-                    npcList.append(id).append("(").append(npcCfg.getName()).append(") ");
-                } else {
-                    npcList.append(id).append(" ");
+            if (npcUnlock != null) {
+                StringBuilder npcList = new StringBuilder();
+                for (String id : stillLocked) {
+                    NpcConfig npcCfg = dataLoader.getNpc(id);
+                    if (npcCfg != null) {
+                        npcList.append(id).append("(").append(nullToEmpty(npcCfg.getName())).append(") ");
+                    } else {
+                        npcList.append(id).append(" ");
+                    }
                 }
+                sb.append("\n\n").append(npcUnlock.replace("{npcList}", npcList.toString().trim())).append("\n");
             }
-            sb.append("\n\n").append(npcUnlock.replace("{npcList}", npcList.toString().trim())).append("\n");
         }
 
-        sb.append("\n\n").append(prompts().getCtrlTagExample()
-                .replace("{puzzleId}", puzzle.getId())).append("\n");
+        String ctrlTagExample = safeReplace(prompts().getCtrlTagExample(),
+                "{puzzleId}", nullToEmpty(puzzle.getId()));
+        sb.append("\n\n").append(ctrlTagExample).append("\n");
 
         if (puzzle.getRequiredItemId() != null) {
             sb.append("\n\n有前置物品的解谜成功示例（必须同时消耗物品）：\n<ctrl>\nPUZZLE:SOLVE:").append(puzzle.getId()).append("\nITEM:TAKE:").append(puzzle.getRequiredItemId()).append("\nREVELATION:+5\n</ctrl>\n");
         }
 
         if (!stillLocked.isEmpty()) {
-            sb.append("\n\n").append(prompts().getSolveWithNpcExample()
-                    .replace("{puzzleId}", puzzle.getId())
-                    .replace("{npcId}", stillLocked.get(0))).append("\n");
+            String solveWithNpc = safeReplace(prompts().getSolveWithNpcExample(),
+                    "{puzzleId}", nullToEmpty(puzzle.getId()),
+                    "{npcId}", stillLocked.get(0));
+            sb.append("\n\n").append(solveWithNpc).append("\n");
         }
 
         return sb.toString();
@@ -207,13 +217,38 @@ public class PuzzleAI {
         String dynamicName = session.getDynamicItemName(itemId);
         if (dynamicName != null) return dynamicName;
         ItemConfig item = dataLoader.getItem(itemId);
-        return item != null ? item.getName() : itemId;
+        return item != null ? nullToEmpty(item.getName()) : itemId;
     }
 
     private List<GameSession.ChatMessage> buildRecentContext(GameSession session) {
         List<GameSession.ChatMessage> all = session.getChatHistory();
         int limit = Math.min(gameConfig().getMapAiHistoryLimit(), all.size());
         int start = Math.max(0, all.size() - limit);
-        return all.subList(start, all.size());
+        return new ArrayList<>(all.subList(start, all.size()));
+    }
+
+    private static String nullToEmpty(String s) {
+        return s != null ? s : "";
+    }
+
+    private static String safeReplace(String template, String... pairs) {
+        if (template == null) return "";
+        String result = template;
+        for (int i = 0; i + 1 < pairs.length; i += 2) {
+            result = result.replace(pairs[i], pairs[i + 1] != null ? pairs[i + 1] : "");
+        }
+        return result;
+    }
+
+    private static void appendSection(StringBuilder sb, String text) {
+        if (text != null && !text.isBlank()) {
+            sb.append("\n").append(text).append("\n");
+        }
+    }
+
+    private static void appendNonNull(StringBuilder sb, String text) {
+        if (text != null) {
+            sb.append(text);
+        }
     }
 }

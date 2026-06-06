@@ -35,7 +35,11 @@ public class InputAuditor {
     }
 
     private PromptsConfig.AuditorPrompts prompts() {
-        return dataLoader.getPrompts().getAuditor();
+        PromptsConfig promptsConfig = dataLoader.getPrompts();
+        if (promptsConfig == null || promptsConfig.getAuditor() == null) {
+            return new PromptsConfig.AuditorPrompts();
+        }
+        return promptsConfig.getAuditor();
     }
 
     public String audit(String playerMessage) {
@@ -50,9 +54,13 @@ public class InputAuditor {
         try {
             String systemPrompt = prompts().getSystemPrompt();
             String result = auditLlmService.chat(systemPrompt, "玩家输入：" + playerMessage);
-            if (result != null && result.contains("是") && !result.contains("否")) {
-                log.warn("Input blocked by LLM audit, input: {}", truncateForLog(playerMessage));
-                return generateWarning();
+            if (result != null) {
+                String trimmed = result.trim();
+                boolean blocked = isBlocked(trimmed);
+                if (blocked) {
+                    log.warn("Input blocked by LLM audit, input: {}", truncateForLog(playerMessage));
+                    return generateWarning();
+                }
             }
         } catch (Exception e) {
             log.error("LLM audit failed, blocking input by fail-closed: {}", e.getMessage());
@@ -60,6 +68,21 @@ public class InputAuditor {
         }
 
         return null;
+    }
+
+    private boolean isBlocked(String result) {
+        String upper = result.toUpperCase();
+        if (upper.contains("BLOCK") || upper.contains("REJECT") || upper.contains("拒绝")) {
+            return true;
+        }
+        String trimmed = result.trim();
+        if (trimmed.equals("是") || trimmed.equals("YES") || trimmed.equals("Y")) {
+            return true;
+        }
+        if (trimmed.startsWith("是，") || trimmed.startsWith("是。") || trimmed.startsWith("是 ")) {
+            return true;
+        }
+        return false;
     }
 
     private synchronized String generateWarning() {

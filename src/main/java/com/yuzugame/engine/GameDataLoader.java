@@ -26,18 +26,20 @@ public class GameDataLoader {
     @Value("${yuzu.data-dir:}")
     private String dataDir;
 
-    private Map<String, ItemConfig> items = new HashMap<>();
-    private Map<String, MapConfig> maps = new HashMap<>();
-    private Map<String, NpcConfig> npcs = new HashMap<>();
-    private Map<String, PuzzleConfig> puzzles = new HashMap<>();
-    private StoryConfig story;
-    private ProtagonistConfig protagonist;
-    private List<EndingRuleConfig> endingRules = new ArrayList<>();
-    private Map<String, RedemptionCodeConfig> redemptionCodes = new HashMap<>();
-    private PromptsConfig prompts;
-    private GameConfig gameConfig;
-    private List<MapConfig> mapList = new ArrayList<>();
-    private List<NpcConfig> npcList = new ArrayList<>();
+    private volatile Map<String, ItemConfig> items = Collections.emptyMap();
+    private volatile Map<String, MapConfig> maps = Collections.emptyMap();
+    private volatile Map<String, NpcConfig> npcs = Collections.emptyMap();
+    private volatile Map<String, PuzzleConfig> puzzles = Collections.emptyMap();
+    private volatile StoryConfig story;
+    private volatile ProtagonistConfig protagonist;
+    private volatile List<EndingRuleConfig> endingRules = Collections.emptyList();
+    private volatile Map<String, RedemptionCodeConfig> redemptionCodes = Collections.emptyMap();
+    private volatile PromptsConfig prompts;
+    private volatile GameConfig gameConfig;
+    private volatile List<MapConfig> mapList = Collections.emptyList();
+    private volatile List<NpcConfig> npcList = Collections.emptyList();
+
+    private GameEngine gameEngine;
 
     static String normalizeCode(String code) {
         return CodeUtils.normalizeCode(code);
@@ -45,55 +47,107 @@ public class GameDataLoader {
 
     public String getDataDir() { return dataDir; }
 
+    public void setGameEngine(GameEngine gameEngine) {
+        this.gameEngine = gameEngine;
+    }
+
     @PostConstruct
     public void init() {
+        loadAllData();
+    }
+
+    public synchronized void reload() {
+        log.info("Reloading game data...");
+        loadAllData();
+        if (gameEngine != null) {
+            gameEngine.clearPatternCache();
+        }
+    }
+
+    private void loadAllData() {
+        Map<String, ItemConfig> newItems = new HashMap<>();
+        Map<String, MapConfig> newMaps = new HashMap<>();
+        Map<String, NpcConfig> newNpcs = new HashMap<>();
+        Map<String, PuzzleConfig> newPuzzles = new HashMap<>();
+        Map<String, RedemptionCodeConfig> newCodes = new HashMap<>();
+        List<MapConfig> newMapList;
+        List<NpcConfig> newNpcList;
+        List<EndingRuleConfig> newEndings;
+        StoryConfig newStory;
+        ProtagonistConfig newProtagonist;
+        PromptsConfig newPrompts;
+        GameConfig newGameConfig;
+
         try {
             List<ItemConfig> itemList = loadJsonList("data/items.json", new TypeReference<List<ItemConfig>>() {});
-            items = new HashMap<>();
-            for (ItemConfig i : itemList) items.put(i.getId(), i);
-
-            List<MapConfig> mapsLoaded = loadJsonList("data/maps.json", new TypeReference<List<MapConfig>>() {});
-            maps = new HashMap<>();
-            for (MapConfig m : mapsLoaded) maps.put(m.getId(), m);
-            this.mapList = mapsLoaded;
-
-            List<NpcConfig> npcsLoaded = loadJsonList("data/npcs.json", new TypeReference<List<NpcConfig>>() {});
-            npcs = new HashMap<>();
-            for (NpcConfig n : npcsLoaded) npcs.put(n.getId(), n);
-            this.npcList = npcsLoaded;
-
-            List<PuzzleConfig> puzzleList = loadJsonList("data/puzzles.json", new TypeReference<List<PuzzleConfig>>() {});
-            puzzles = new HashMap<>();
-            for (PuzzleConfig p : puzzleList) puzzles.put(p.getId(), p);
-
-            story = loadJson("data/story.json", StoryConfig.class);
-            protagonist = loadJson("data/protagonist.json", ProtagonistConfig.class);
-
-            List<EndingRuleConfig> endingsLoaded = loadJsonList("data/endings.json", new TypeReference<List<EndingRuleConfig>>() {});
-            endingsLoaded.sort(java.util.Comparator.comparingInt(EndingRuleConfig::getPriority));
-            this.endingRules = endingsLoaded;
-
-            List<RedemptionCodeConfig> codesLoaded = loadJsonList("data/redemption_codes.json", new TypeReference<List<RedemptionCodeConfig>>() {});
-            redemptionCodes = new HashMap<>();
-            for (RedemptionCodeConfig c : codesLoaded) {
-                if (c.isActive()) {
-                    redemptionCodes.put(normalizeCode(c.getCode()), c);
+            if (itemList != null) {
+                for (ItemConfig i : itemList) {
+                    if (i.getId() != null) newItems.put(i.getId(), i);
                 }
             }
 
-            prompts = loadJson("data/prompts.json", PromptsConfig.class);
-            gameConfig = loadJson("data/game_config.json", GameConfig.class);
+            List<MapConfig> mapsLoaded = loadJsonList("data/maps.json", new TypeReference<List<MapConfig>>() {});
+            if (mapsLoaded != null) {
+                for (MapConfig m : mapsLoaded) {
+                    if (m.getId() != null) newMaps.put(m.getId(), m);
+                }
+            }
+            newMapList = mapsLoaded != null ? mapsLoaded : Collections.emptyList();
+
+            List<NpcConfig> npcsLoaded = loadJsonList("data/npcs.json", new TypeReference<List<NpcConfig>>() {});
+            if (npcsLoaded != null) {
+                for (NpcConfig n : npcsLoaded) {
+                    if (n.getId() != null) newNpcs.put(n.getId(), n);
+                }
+            }
+            newNpcList = npcsLoaded != null ? npcsLoaded : Collections.emptyList();
+
+            List<PuzzleConfig> puzzleList = loadJsonList("data/puzzles.json", new TypeReference<List<PuzzleConfig>>() {});
+            if (puzzleList != null) {
+                for (PuzzleConfig p : puzzleList) {
+                    if (p.getId() != null) newPuzzles.put(p.getId(), p);
+                }
+            }
+
+            newStory = loadJson("data/story.json", StoryConfig.class);
+            newProtagonist = loadJson("data/protagonist.json", ProtagonistConfig.class);
+
+            List<EndingRuleConfig> endingsLoaded = loadJsonList("data/endings.json", new TypeReference<List<EndingRuleConfig>>() {});
+            if (endingsLoaded != null) {
+                endingsLoaded.sort(Comparator.comparingInt(EndingRuleConfig::getPriority));
+            }
+            newEndings = endingsLoaded != null ? endingsLoaded : Collections.emptyList();
+
+            List<RedemptionCodeConfig> codesLoaded = loadJsonList("data/redemption_codes.json", new TypeReference<List<RedemptionCodeConfig>>() {});
+            if (codesLoaded != null) {
+                for (RedemptionCodeConfig c : codesLoaded) {
+                    if (c.isActive() && c.getCode() != null) {
+                        newCodes.put(normalizeCode(c.getCode()), c);
+                    }
+                }
+            }
+
+            newPrompts = loadJson("data/prompts.json", PromptsConfig.class);
+            newGameConfig = loadJson("data/game_config.json", GameConfig.class);
+
+            this.items = Collections.unmodifiableMap(newItems);
+            this.maps = Collections.unmodifiableMap(newMaps);
+            this.npcs = Collections.unmodifiableMap(newNpcs);
+            this.puzzles = Collections.unmodifiableMap(newPuzzles);
+            this.redemptionCodes = Collections.unmodifiableMap(newCodes);
+            this.endingRules = Collections.unmodifiableList(newEndings);
+            this.mapList = Collections.unmodifiableList(newMapList);
+            this.npcList = Collections.unmodifiableList(newNpcList);
+            this.story = newStory;
+            this.protagonist = newProtagonist;
+            this.prompts = newPrompts;
+            this.gameConfig = newGameConfig;
 
             log.info("Game data loaded: {} items, {} maps, {} npcs, {} puzzles, {} endings, {} codes",
                     items.size(), maps.size(), npcs.size(), puzzles.size(), endingRules.size(), redemptionCodes.size());
         } catch (Exception e) {
             throw new RuntimeException("Failed to load game data: " + e.getMessage(), e);
         }
-    }
-
-    public synchronized void reload() {
-        log.info("Reloading game data...");
-        init();
     }
 
     private InputStream resolveResource(String classpathPath) throws Exception {
@@ -135,7 +189,10 @@ public class GameDataLoader {
     public ProtagonistConfig getProtagonist() { return protagonist; }
     public List<EndingRuleConfig> getEndingRules() { return endingRules; }
 
-    public RedemptionCodeConfig getRedemptionCode(String code) { return redemptionCodes.get(normalizeCode(code)); }
+    public RedemptionCodeConfig getRedemptionCode(String code) {
+        if (code == null) return null;
+        return redemptionCodes.get(normalizeCode(code));
+    }
     public Map<String, RedemptionCodeConfig> getAllRedemptionCodes() { return redemptionCodes; }
 
     public PromptsConfig getPrompts() { return prompts; }

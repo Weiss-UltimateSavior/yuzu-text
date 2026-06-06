@@ -116,40 +116,50 @@ public class GameSession {
     public String getCurrentArea() { return currentArea; }
     public void setCurrentArea(String currentArea) { this.currentArea = currentArea; }
 
-    public Set<String> getSolvedPuzzles() { return solvedPuzzles; }
+    public Set<String> getSolvedPuzzles() { return Collections.unmodifiableSet(solvedPuzzles); }
+    public void setSolvedPuzzles(Set<String> solvedPuzzles) { this.solvedPuzzles = new HashSet<>(solvedPuzzles); }
     public boolean isPuzzleSolved(String puzzleId) { return solvedPuzzles.contains(puzzleId); }
     public void markPuzzleSolved(String puzzleId) { solvedPuzzles.add(puzzleId); }
 
-    public Set<String> getFailedPuzzles() { return failedPuzzles; }
+    public Set<String> getFailedPuzzles() { return Collections.unmodifiableSet(failedPuzzles); }
+    public void setFailedPuzzles(Set<String> failedPuzzles) { this.failedPuzzles = new HashSet<>(failedPuzzles); }
     public void markPuzzleFailed(String puzzleId) { failedPuzzles.add(puzzleId); }
 
-    public Set<String> getUnlockedNpcs() { return unlockedNpcs; }
+    public Set<String> getUnlockedNpcs() { return Collections.unmodifiableSet(unlockedNpcs); }
+    public void setUnlockedNpcs(Set<String> unlockedNpcs) { this.unlockedNpcs = new HashSet<>(unlockedNpcs); }
     public boolean isNpcUnlocked(String npcId) { return unlockedNpcs.contains(npcId); }
     public void unlockNpc(String npcId) { unlockedNpcs.add(npcId); }
 
-    public Set<String> getKilledNpcs() { return killedNpcs; }
+    public Set<String> getKilledNpcs() { return Collections.unmodifiableSet(killedNpcs); }
+    public void setKilledNpcs(Set<String> killedNpcs) { this.killedNpcs = new HashSet<>(killedNpcs); }
     public boolean isNpcKilled(String npcId) { return killedNpcs.contains(npcId); }
     public void killNpc(String npcId) { killedNpcs.add(npcId); }
 
-    public Set<String> getFoundItems() { return foundItems; }
+    public Set<String> getFoundItems() { return Collections.unmodifiableSet(foundItems); }
+    public void setFoundItems(Set<String> foundItems) { this.foundItems = new HashSet<>(foundItems); }
     public boolean isItemFound(String itemId) { return foundItems.contains(itemId); }
     public void foundItem(String itemId) { foundItems.add(itemId); }
 
-    public Map<String, String> getDynamicItemNames() { return dynamicItemNames; }
-    public void setDynamicItemNames(Map<String, String> dynamicItemNames) { this.dynamicItemNames = dynamicItemNames; }
+    public Map<String, String> getDynamicItemNames() { return Collections.unmodifiableMap(dynamicItemNames); }
+    public void setDynamicItemNames(Map<String, String> dynamicItemNames) { this.dynamicItemNames = new HashMap<>(dynamicItemNames); }
     public void registerDynamicItemName(String itemId, String name) { dynamicItemNames.put(itemId, name); }
     public String getDynamicItemName(String itemId) { return dynamicItemNames.get(itemId); }
 
     public int getPuzzleAttempts(String puzzleId) { return puzzleAttempts.getOrDefault(puzzleId, 0); }
-    public Map<String, Integer> getPuzzleAttempts() { return puzzleAttempts; }
+    public Map<String, Integer> getPuzzleAttempts() { return Collections.unmodifiableMap(puzzleAttempts); }
+    public void setPuzzleAttempts(Map<String, Integer> puzzleAttempts) { this.puzzleAttempts = new HashMap<>(puzzleAttempts); }
     public int incrementPuzzleAttempts(String puzzleId) { return puzzleAttempts.merge(puzzleId, 1, Integer::sum); }
 
     public int getNpcDialogueCount(String npcId) { return npcDialogueCounts.getOrDefault(npcId, 0); }
-    public Map<String, Integer> getNpcDialogueCounts() { return npcDialogueCounts; }
+    public Map<String, Integer> getNpcDialogueCounts() { return Collections.unmodifiableMap(npcDialogueCounts); }
+    public void setNpcDialogueCounts(Map<String, Integer> npcDialogueCounts) { this.npcDialogueCounts = new HashMap<>(npcDialogueCounts); }
     public int incrementNpcDialogueCount(String npcId) { return npcDialogueCounts.merge(npcId, 1, Integer::sum); }
 
-    public List<ChatMessage> getChatHistory() { return chatHistory; }
-    public void addChatMessage(ChatMessage msg) { chatHistory.add(msg); }
+    public List<ChatMessage> getChatHistory() { return Collections.unmodifiableList(chatHistory); }
+    public void setChatHistory(List<ChatMessage> chatHistory) { this.chatHistory = new ArrayList<>(chatHistory); }
+    public void addChatMessage(ChatMessage msg) {
+        chatHistory.add(msg);
+    }
 
     public boolean isEnded() { return ended; }
     public void setEnded(boolean ended) { this.ended = ended; }
@@ -173,18 +183,23 @@ public class GameSession {
         return player.getSanity() + player.getRevelation() + player.getAffection() + getAliveNpcCount() * 10;
     }
 
-    public Set<Integer> getTriggeredSanityWarnings() { return triggeredSanityWarnings; }
+    public Set<Integer> getTriggeredSanityWarnings() { return Collections.unmodifiableSet(triggeredSanityWarnings); }
+    public void setTriggeredSanityWarnings(Set<Integer> triggeredSanityWarnings) { this.triggeredSanityWarnings = new HashSet<>(triggeredSanityWarnings); }
+    public void triggerSanityWarning(int threshold) { triggeredSanityWarnings.add(threshold); }
 
-    public List<String> getYuzuInventory() { return yuzuInventory; }
+    public List<String> getYuzuInventory() { return Collections.unmodifiableList(yuzuInventory); }
+    public void setYuzuInventory(List<String> yuzuInventory) { this.yuzuInventory = new ArrayList<>(yuzuInventory); }
     public boolean yuzuHasItem(String itemId) { return yuzuInventory.contains(itemId); }
     public void addYuzuItem(String itemId) { if (!yuzuInventory.contains(itemId)) yuzuInventory.add(itemId); }
     public void removeYuzuItem(String itemId) { yuzuInventory.remove(itemId); }
 
     public boolean isNpcRevived(String npcId) { return revivedNpcs.contains(npcId); }
     public void reviveNpc(String npcId) { revivedNpcs.add(npcId); killedNpcs.remove(npcId); }
-    public Set<String> getRevivedNpcs() { return revivedNpcs; }
+    public Set<String> getRevivedNpcs() { return Collections.unmodifiableSet(revivedNpcs); }
+    public void setRevivedNpcs(Set<String> revivedNpcs) { this.revivedNpcs = new HashSet<>(revivedNpcs); }
 
-    public Map<String, Integer> getUsedRedemptionCodes() { return usedRedemptionCodes; }
+    public Map<String, Integer> getUsedRedemptionCodes() { return Collections.unmodifiableMap(usedRedemptionCodes); }
+    public void setUsedRedemptionCodes(Map<String, Integer> usedRedemptionCodes) { this.usedRedemptionCodes = new HashMap<>(usedRedemptionCodes); }
     public int getRedemptionCodeUseCount(String code) { return usedRedemptionCodes.getOrDefault(normalizeCode(code), 0); }
     public void recordRedemptionCodeUse(String code) { usedRedemptionCodes.merge(normalizeCode(code), 1, Integer::sum); }
 
@@ -192,8 +207,8 @@ public class GameSession {
         return CodeUtils.normalizeCode(code);
     }
 
-    public Map<String, List<PuzzleMemoryEntry>> getPuzzleMemory() { return puzzleMemory; }
-    public void setPuzzleMemory(Map<String, List<PuzzleMemoryEntry>> puzzleMemory) { this.puzzleMemory = puzzleMemory; }
+    public Map<String, List<PuzzleMemoryEntry>> getPuzzleMemory() { return Collections.unmodifiableMap(puzzleMemory); }
+    public void setPuzzleMemory(Map<String, List<PuzzleMemoryEntry>> puzzleMemory) { this.puzzleMemory = new HashMap<>(puzzleMemory); }
 
     public List<PuzzleMemoryEntry> getPuzzleMemoryEntries(String puzzleId) {
         return puzzleMemory.getOrDefault(puzzleId, List.of());

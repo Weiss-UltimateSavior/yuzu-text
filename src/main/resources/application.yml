@@ -6,10 +6,18 @@ spring:
     name: yuzu-game
 
   datasource:
-    url: jdbc:mysql://yuzu/yuzu?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
-    username: yuzu
-    password: your_password_password
+    url: jdbc:mysql://${DB_HOST:165.154.43.77}/${DB_NAME:yuzu}?useSSL=true&requireSSL=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
+    username: ${DB_USERNAME:yuzu}
+    password: ${DB_PASSWORD:4ZmjJBG6dpNSK2n7}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 2
+      max-lifetime: 120000
+      keepalive-time: 30000
+      connection-timeout: 30000
+      validation-timeout: 5000
+      connection-test-query: SELECT 1
 
   jpa:
     hibernate:
@@ -21,24 +29,24 @@ spring:
 
   data:
     redis:
-      host: your_password_password
-      port: 6379
-      password: your_password_password
+      host: ${REDIS_HOST:165.154.43.77}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:redis_yFh7Wx}
       timeout: 5000ms
 
 yuzu:
   data-dir: src/main/resources/data
   admin:
-    username: yuzu
-    password: yuzu2026
+    username: ${ADMIN_USERNAME:yuzu}
+    password: ${ADMIN_PASSWORD:yuzu2026}
   llm:
-    base-url: https://api.deepseek.com/v1
-    api-key: your_password_password
-    model: deepseek-v4-flash
+    base-url: ${LLM_BASE_URL:https://api.rinne.cyou/v1}
+    api-key: ${LLM_API_KEY:sk-45SG3Z7sEU4Md8H0oR0T3ZBOyQmXiItfvF0d3V4ey5jqp7NY}
+    model: ${LLM_MODEL:deepseek-ai/deepseek-v4-flash}
   audit-llm:
-    base-url: https://api.moonshot.cn/v1
-    api-key: your_password_password
-    model: kimi-k2.5
+    base-url: ${AUDIT_LLM_BASE_URL:https://api.moonshot.cn/v1}
+    api-key: ${AUDIT_LLM_API_KEY:sk-ouKkheNKsZmp6UtT26nyrXaW3NrVdA6oRJaw04S0d3LoaVZR}
+    model: ${AUDIT_LLM_MODEL:kimi-k2.5}
 
 logging:
   level:

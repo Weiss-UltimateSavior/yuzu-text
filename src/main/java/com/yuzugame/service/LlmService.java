@@ -2,6 +2,7 @@ package com.yuzugame.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.yuzugame.util.CodeUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -13,13 +14,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 
 /**
  * LLM 服务 —— 与大语言模型 API 的通信层。
@@ -55,22 +53,22 @@ public class LlmService {
     private static final long BASE_RETRY_DELAY_MS = 3000;
 
     @Value("${yuzu.llm.base-url}")
-    private String baseUrl;
+    private volatile String baseUrl;
 
     @Value("${yuzu.llm.api-key}")
-    private String apiKey;
+    private volatile String apiKey;
 
     @Value("${yuzu.llm.model}")
-    private String model;
+    private volatile String model;
 
     public String getBaseUrl() { return baseUrl; }
     public String getApiKey() { return apiKey; }
     public String getModel() { return model; }
 
     public void updateConfig(String baseUrl, String apiKey, String model) {
-        if (baseUrl != null && !baseUrl.isEmpty()) this.baseUrl = baseUrl;
-        if (apiKey != null && !apiKey.isEmpty()) this.apiKey = apiKey;
-        if (model != null && !model.isEmpty()) this.model = model;
+        if (baseUrl != null && !baseUrl.isBlank()) this.baseUrl = baseUrl;
+        if (apiKey != null && !apiKey.isBlank()) this.apiKey = apiKey;
+        if (model != null && !model.isBlank()) this.model = model;
         log.info("LlmService config updated: baseUrl={}, model={}", this.baseUrl, this.model);
     }
 
@@ -93,13 +91,7 @@ public class LlmService {
     private static HttpClient createClient() {
         try {
             SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
-            sslContext.init(null, new TrustManager[]{
-                new X509TrustManager() {
-                    public void checkClientTrusted(X509Certificate[] chain, String authType) {}
-                    public void checkServerTrusted(X509Certificate[] chain, String authType) {}
-                    public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-                }
-            }, null);
+            sslContext.init(null, null, null);
             return HttpClient.newBuilder()
                     .connectTimeout(Duration.ofSeconds(10))
                     .sslContext(sslContext)
@@ -215,16 +207,20 @@ public class LlmService {
         StringBuilder json = new StringBuilder();
         json.append("{\"model\":\"").append(useModel).append("\",\"messages\":[");
 
-        json.append("{\"role\":\"system\",\"content\":").append(jsonEscape(systemPrompt)).append("}");
+        json.append("{\"role\":\"system\",\"content\":").append(CodeUtils.jsonEscape(systemPrompt)).append("}");
 
         if (history != null) {
             for (Map<String, String> h : history) {
-                json.append(",{\"role\":\"").append(h.get("role"))
-                    .append("\",\"content\":").append(jsonEscape(h.get("content"))).append("}");
+                String role = h.get("role");
+                if (!"system".equals(role) && !"user".equals(role) && !"assistant".equals(role)) {
+                    role = "user";
+                }
+                json.append(",{\"role\":\"").append(role)
+                    .append("\",\"content\":").append(CodeUtils.jsonEscape(h.get("content"))).append("}");
             }
         }
 
-        json.append(",{\"role\":\"user\",\"content\":").append(jsonEscape(userMessage)).append("}");
+        json.append(",{\"role\":\"user\",\"content\":").append(CodeUtils.jsonEscape(userMessage)).append("}");
         json.append("],\"temperature\":0.8,\"max_tokens\":2048}");
 
         return json.toString();
@@ -262,30 +258,5 @@ public class LlmService {
         } catch (Exception e) {
             return "";
         }
-    }
-
-    /**
-     * JSON 字符串转义 —— 手动构建 JSON 以避免引入额外依赖。
-     *
-     * <p>处理特殊字符：{@code "} → {@code \"}、{@code \} → {@code \\}、
-     * 换行/回车/制表符 → 对应的 JSON 转义序列。</p>
-     *
-     * @param text 原始文本
-     * @return 用双引号包裹的 JSON 安全字符串
-     */
-    private String jsonEscape(String text) {
-        StringBuilder sb = new StringBuilder("\"");
-        for (char c : text.toCharArray()) {
-            switch (c) {
-                case '"' -> sb.append("\\\"");
-                case '\\' -> sb.append("\\\\");
-                case '\n' -> sb.append("\\n");
-                case '\r' -> sb.append("\\r");
-                case '\t' -> sb.append("\\t");
-                default -> sb.append(c);
-            }
-        }
-        sb.append("\"");
-        return sb.toString();
     }
 }

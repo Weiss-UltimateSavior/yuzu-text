@@ -41,7 +41,7 @@ import java.util.concurrent.TimeUnit;
 public class GameService {
 
     private static final Logger log = LoggerFactory.getLogger(GameService.class);
-    private static final long REDIS_TTL_HOURS = 2;
+    private static final long REDIS_TTL_HOURS = 6;
     private static final String REDIS_KEY_PREFIX = "yuzu:session:";
 
     private final GameEngine engine;
@@ -75,7 +75,7 @@ public class GameService {
      * </ol></p>
      */
     public Map<String, Object> newGame() {
-        String sessionId = UUID.randomUUID().toString().substring(0, 8);
+        String sessionId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         GameSession session = new GameSession();
         session.setSessionId(sessionId);
 
@@ -103,8 +103,14 @@ public class GameService {
      * <p>每次操作后自动持久化到 Redis + MySQL。</p>
      */
     public Map<String, Object> playerMessage(String sessionId, String message) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return Map.of("error", "Session ID is required");
+        }
         if (message == null) {
             return Map.of("error", "Message is required");
+        }
+        if (message.length() > 200) {
+            return Map.of("error", "消息过长，最多200字");
         }
 
         GameSession session = loadSession(sessionId);
@@ -136,6 +142,9 @@ public class GameService {
      * 查询指定会话的当前状态 —— 不触发任何游戏逻辑。
      */
     public Map<String, Object> getSessionState(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return Map.of("error", "Session ID is required");
+        }
         GameSession session = loadSession(sessionId);
         if (session == null) {
             return Map.of("error", "Session not found");
@@ -147,28 +156,16 @@ public class GameService {
     }
 
     /**
-     * 兑换码 —— 根据口令为玩家添加属性奖励。
+     * 配置会话级别的 LLM 参数 —— 允许玩家使用自定义 API 地址、密钥和模型。
      *
-     * <p>逻辑：
-     * <ol>
-     *   <li>查找兑换码配置（不区分大小写，中文口令原样匹配）</li>
-     *   <li>检查会话是否已使用该兑换码达到上限</li>
-     *   <li>检查游戏是否已结束</li>
-     *   <li>应用奖励数值到玩家属性</li>
-     *   <li>记录使用次数并持久化</li>
-     * </ol></p>
+     * <p>传入空值时清除自定义配置，恢复使用系统默认 API。</p>
      *
-     * <p>支持的奖励属性及范围限制：
-     * <ul>
-     *   <li>{@code sanity} — 理智，范围 [0,100]（由 Player.setSanity 钳制）</li>
-     *   <li>{@code revelation} — 揭露度，范围 [0,100]（由 Player.setRevelation 钳制）</li>
-     *   <li>{@code affection} — 好感度，范围 [0,100]（由 Player.setAffection 钳制）</li>
-     *   <li>{@code turn} — 回合数，下限 1（不允许负数回合），无上限</li>
-     * </ul></p>
-     *
-     * <p>兑换码配置文件：{@code src/main/resources/data/redemption_codes.json}</p>
+     * <p>配置前会调用 LLM API 进行校验，确保参数有效。</p>
      */
     public Map<String, Object> configureLlm(String sessionId, String baseUrl, String apiKey, String model) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return Map.of("success", false, "message", "会话ID不能为空");
+        }
         GameSession session = loadSession(sessionId);
         if (session == null) {
             return Map.of("success", false, "message", "会话不存在");
@@ -181,6 +178,28 @@ public class GameService {
                           && (apiKey == null || apiKey.isBlank())
                           && (model == null || model.isBlank());
         if (!isClearing) {
+            if (baseUrl != null && !baseUrl.isBlank()) {
+                try {
+                    var url = new java.net.URI(baseUrl).toURL();
+                    String host = url.getHost();
+                    if (host == null || host.isBlank()) {
+                        return Map.of("success", false, "message", "API 校验失败：URL 格式无效");
+                    }
+                    byte[] addr = java.net.InetAddress.getByName(host).getAddress();
+                    if (addr.length == 4 && (addr[0] == 0 || addr[0] == 10
+                            || (addr[0] == (byte) 172 && addr[1] >= 16 && addr[1] <= 31)
+                            || (addr[0] == (byte) 192 && addr[1] == (byte) 168)
+                            || (addr[0] == (byte) 127))) {
+                        return Map.of("success", false, "message", "API 校验失败：不允许使用内网地址");
+                    }
+                    if (addr.length == 16 && addr[0] == 0 && addr[1] == 0 && addr[2] == 0
+                            && (addr[3] == 0 || addr[3] == 1)) {
+                        return Map.of("success", false, "message", "API 校验失败：不允许使用内网地址");
+                    }
+                } catch (Exception e) {
+                    return Map.of("success", false, "message", "API 校验失败：URL 格式无效 - " + e.getMessage());
+                }
+            }
             String error = llmService.validateApi(baseUrl, apiKey, model);
             if (error != null) {
                 return Map.of("success", false, "message", "API 校验失败：" + error);
@@ -196,6 +215,9 @@ public class GameService {
     }
 
     public Map<String, Object> redeemCode(String sessionId, String code) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return Map.of("success", false, "message", "会话ID不能为空");
+        }
         if (code == null || code.isBlank()) {
             return Map.of("success", false, "message", "兑换码不能为空");
         }
@@ -223,7 +245,7 @@ public class GameService {
         Map<String, Integer> applied = new LinkedHashMap<>();
         Player player = session.getPlayer();
 
-        // 应用奖励：sanity/revelation/affection 由 Player 钳制到 [0,100]，turn 下限为1
+        if (rewards != null) {
         for (Map.Entry<String, Integer> entry : rewards.entrySet()) {
             String attr = entry.getKey();
             int delta = entry.getValue();
@@ -232,19 +254,21 @@ public class GameService {
                 case "revelation" -> { player.addRevelation(delta); applied.put("revelation", player.getRevelation()); }
                 case "affection" -> { player.addAffection(delta); applied.put("affection", player.getAffection()); }
                 case "turn" -> {
-                    int newTurn = Math.max(1, session.getTurn() + delta); // 回合数下限保护：不允许<1
+                    int newTurn = Math.max(1, session.getTurn() + delta);
                     session.setTurn(newTurn);
                     applied.put("turn", newTurn);
                 }
                 default -> log.warn("Unknown reward attribute: {}", attr);
             }
         }
+        }
 
         session.recordRedemptionCodeUse(config.getCode());
-        saveSession(session);
 
         String systemNarrative = "一股未知的力量从其他世界线跨域进行了干扰，你感到无比强大";
         session.addChatMessage(new GameSession.ChatMessage("SYSTEM", null, systemNarrative + "（" + config.getDescription() + "）"));
+
+        saveSession(session);
 
         log.info("Redeemed code {} for session {}, rewards applied: {}", config.getCode(), sessionId, applied);
 
@@ -295,13 +319,29 @@ public class GameService {
      * <p>先写 MySQL 保证持久性，再写 Redis 保证缓存一致性。</p>
      */
     private void saveSession(GameSession session) {
-        try {
-            repository.save(GameSessionEntity.fromModel(session));
-        } catch (Exception e) {
-            log.error("Failed to save session to MySQL: {}", e.getMessage());
+        boolean saved = false;
+        for (int attempt = 1; attempt <= 3 && !saved; attempt++) {
+            try {
+                GameSessionEntity entity = GameSessionEntity.fromModel(session);
+                repository.findById(session.getSessionId()).ifPresent(existing -> {
+                    entity.setCreatedAt(existing.getCreatedAt());
+                });
+                repository.save(entity);
+                saved = true;
+            } catch (Exception e) {
+                log.error("Failed to save session to MySQL (attempt {}/3): {}", attempt, e.getMessage());
+                if (attempt < 3) {
+                    try { Thread.sleep(1000 * attempt); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+                }
+            }
         }
 
-        cacheToRedis(session);
+        if (saved) {
+            cacheToRedis(session);
+        } else {
+            cacheToRedis(session);
+            log.error("MySQL save failed after 3 attempts for session {}, kept Redis cache as fallback", session.getSessionId());
+        }
     }
 
     /**
@@ -313,6 +353,14 @@ public class GameService {
             redisTemplate.opsForValue().set(REDIS_KEY_PREFIX + session.getSessionId(), json, REDIS_TTL_HOURS, TimeUnit.HOURS);
         } catch (Exception e) {
             log.warn("Failed to cache session to Redis: {}", e.getMessage());
+        }
+    }
+
+    private void evictRedis(String sessionId) {
+        try {
+            redisTemplate.delete(REDIS_KEY_PREFIX + sessionId);
+        } catch (Exception e) {
+            log.warn("Failed to evict Redis cache for session {}: {}", sessionId, e.getMessage());
         }
     }
 
@@ -409,8 +457,11 @@ public class GameService {
         state.put("mapNames", mapNames);
 
         Map<String, String> chapterNames = new LinkedHashMap<>();
-        for (StoryConfig.ChapterDef ch : dataLoader.getStory().getChapters()) {
-            chapterNames.put(ch.getId(), ch.getName());
+        List<StoryConfig.ChapterDef> chapters = dataLoader.getStory() != null ? dataLoader.getStory().getChapters() : null;
+        if (chapters != null) {
+            for (StoryConfig.ChapterDef ch : chapters) {
+                chapterNames.put(ch.getId(), ch.getName());
+            }
         }
         state.put("chapterNames", chapterNames);
 

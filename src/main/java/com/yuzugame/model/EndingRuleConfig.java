@@ -1,5 +1,6 @@
 package com.yuzugame.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;
 
 /**
@@ -47,6 +48,7 @@ import java.util.List;
  *
  * @see com.yuzugame.agent.DirectorAI#determineEndingAction
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class EndingRuleConfig {
 
     private String type;
@@ -75,6 +77,7 @@ public class EndingRuleConfig {
      * <p>示例：{@code {"field": "player.sanity", "operator": "lte", "value": 0}}
      * 表示"玩家理智 ≤ 0"</p>
      */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class EndingCondition {
         private String field;
         private String operator;

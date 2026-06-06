@@ -123,7 +123,9 @@ public class GameStateManager {
             if (tags.isEmpty()) {
                 for (String line : block.split("\\n")) {
                     line = line.trim();
-                    if (!line.isEmpty()) tags.add(line);
+                    if (!line.isEmpty() && line.contains(":") && line.split(":").length >= 2) {
+                        tags.add(line);
+                    }
                 }
             }
         }
@@ -144,7 +146,7 @@ public class GameStateManager {
      *   <li>PROTAGONIST（柚子）：SANITY/REVELATION/AFFECTION + ITEM:GIVE/CREATE/USE</li>
      *   <li>MAP（地图AI）：SANITY/REVELATION/AFFECTION + ITEM:FOUND + NPC:UNLOCK + PUZZLE:ACTIVATE</li>
      *   <li>NPC：SANITY/REVELATION/AFFECTION + ITEM:GIVE（第3次对话给道具）</li>
-     *   <li>DIRECTOR（导演）：全部权限（MAP/CHAPTER/ENDING/ITEM/NPC/PUZZLE/属性修改）</li>
+     *   <li>DIRECTOR（导演）：SANITY/REVELATION/AFFECTION/NPC_AFFECTION + ITEM:GIVE/CREATE/USE/TAKE + NPC:KILL/REVIVE + PUZZLE:ACTIVATE + ENDING/EVENT（地图/章节切换由引擎处理，不由标签触发）</li>
      *   <li>PUZZLE：SANITY/REVELATION/AFFECTION + ITEM:TAKE + PUZZLE:SOLVE/FAIL + NPC:UNLOCK</li>
      * </ul></p>
      */
@@ -242,7 +244,8 @@ public class GameStateManager {
 
     /** 处理 SANITY:Δ 标签 —— 修改玩家理智值（Δ为正负整数） */
     private String handleSanity(GameSession session, String deltaStr) {
-        int delta = Integer.parseInt(deltaStr.trim());
+        Integer delta = parseDelta(deltaStr);
+        if (delta == null) return null;
         session.getPlayer().addSanity(delta);
         log.debug("Sanity {} -> now {}", delta > 0 ? "+" + delta : delta, session.getPlayer().getSanity());
         return null;
@@ -250,7 +253,8 @@ public class GameStateManager {
 
     /** 处理 REVELATION:Δ 标签 —— 修改揭露度 */
     private String handleRevelation(GameSession session, String deltaStr) {
-        int delta = Integer.parseInt(deltaStr.trim());
+        Integer delta = parseDelta(deltaStr);
+        if (delta == null) return null;
         session.getPlayer().addRevelation(delta);
         log.debug("Revelation {} -> now {}", delta > 0 ? "+" + delta : delta, session.getPlayer().getRevelation());
         return null;
@@ -258,15 +262,34 @@ public class GameStateManager {
 
     /** 处理 AFFECTION:Δ 标签 —— 修改柚子好感度 */
     private String handleAffection(GameSession session, String deltaStr) {
-        int delta = Integer.parseInt(deltaStr.trim());
+        Integer delta = parseDelta(deltaStr);
+        if (delta == null) return null;
         session.getPlayer().addAffection(delta);
         log.debug("Affection {} -> now {}", delta > 0 ? "+" + delta : delta, session.getPlayer().getAffection());
         return null;
     }
 
+    private Integer parseDelta(String deltaStr) {
+        if (deltaStr == null || deltaStr.isBlank()) {
+            log.warn("Delta value is empty");
+            return null;
+        }
+        try {
+            return Integer.parseInt(deltaStr.trim());
+        } catch (NumberFormatException e) {
+            log.warn("Invalid delta value: {}", deltaStr);
+            return null;
+        }
+    }
+
     /** 处理 NPC_AFFECTION:npcId:Δ 标签 —— 修改指定NPC的对话计数（兼容旧标签） */
     private String handleNpcAffection(GameSession session, String npcId, String deltaStr) {
-        int delta = Integer.parseInt(deltaStr.trim());
+        if (npcId == null || npcId.isBlank()) {
+            log.warn("NPC_AFFECTION tag missing npcId");
+            return null;
+        }
+        Integer delta = parseDelta(deltaStr);
+        if (delta == null) return null;
         for (int i = 0; i < Math.abs(delta); i++) {
             if (delta > 0) session.incrementNpcDialogueCount(npcId);
         }
@@ -290,10 +313,18 @@ public class GameStateManager {
      * <p>物品ID命名规范：{@code item_{来源}_{用途}}，如 {@code item_maintenance_gift}、{@code item_pipe_sample}。</p>
      */
     private String handleItem(GameSession session, String action, String param, AgentType agent) {
+        if (param == null || param.isBlank()) {
+            log.warn("ITEM:{} tag missing param", action);
+            return null;
+        }
         return switch (action) {
             case "GIVE" -> {
                 String[] giveParts = param.split(":", 2);
                 String itemId = giveParts[0];
+                if (itemId.isBlank()) {
+                    log.warn("ITEM:GIVE tag missing itemId");
+                    yield null;
+                }
                 String itemName = giveParts.length > 1 ? giveParts[1] : null;
                 if (itemName == null || itemName.isBlank()) {
                     log.warn("ITEM:GIVE tag missing Chinese name: ITEM:GIVE:{} — expected format ITEM:GIVE:id:中文名称", itemId);
@@ -320,6 +351,10 @@ public class GameStateManager {
             case "FOUND" -> {
                 String[] itemParts = param.split(":", 2);
                 String itemId = itemParts[0];
+                if (itemId.isBlank()) {
+                    log.warn("ITEM:FOUND tag missing itemId");
+                    yield null;
+                }
                 String itemName = itemParts.length > 1 ? itemParts[1] : null;
                 if (itemName == null || itemName.isBlank()) {
                     log.warn("ITEM:FOUND tag missing Chinese name: ITEM:FOUND:{} — expected format ITEM:FOUND:id:中文名称", itemId);
@@ -380,6 +415,10 @@ public class GameStateManager {
      * </ul>
      */
     private String handleNpc(GameSession session, String action, String param) {
+        if (param == null || param.isBlank()) {
+            log.warn("NPC:{} tag missing npcId", action);
+            return null;
+        }
         return switch (action) {
             case "UNLOCK" -> {
                 boolean firstUnlock = !session.isNpcUnlocked(param);
@@ -482,6 +521,10 @@ public class GameStateManager {
      * @return 切换成功返回 mapId，地图不存在返回 null
      */
     public String handleMap(GameSession session, String mapId) {
+        if (mapId == null || mapId.isBlank()) {
+            log.warn("MAP tag missing mapId");
+            return null;
+        }
         mapId = mapId.trim().replaceAll("[^a-zA-Z0-9_]", "");
         com.yuzugame.model.MapConfig mapConfig = dataLoader.getMap(mapId);
         if (mapConfig == null) {
@@ -517,6 +560,10 @@ public class GameStateManager {
 
     /** 处理 CHAPTER:chapterId 标签 —— 推进章节 */
     private String handleChapter(GameSession session, String chapterId) {
+        if (chapterId == null || chapterId.isBlank()) {
+            log.warn("CHAPTER tag missing chapterId");
+            return null;
+        }
         chapterId = chapterId.trim().replaceAll("[^a-zA-Z0-9_]", "");
         session.setCurrentChapter(chapterId);
         log.debug("Chapter advanced to: {}", chapterId);
@@ -525,6 +572,10 @@ public class GameStateManager {
 
     /** 处理 ENDING:type 标签 —— 触发结局（FAIL/FINAL/PERFECT） */
     private String handleEnding(GameSession session, String endingType) {
+        if (endingType == null || endingType.isBlank()) {
+            log.warn("ENDING tag missing endingType");
+            return null;
+        }
         endingType = endingType.trim().replaceAll("[^a-zA-Z0-9_]", "");
         session.setEnded(true);
         session.setEndingType(endingType);
@@ -535,12 +586,20 @@ public class GameStateManager {
 
     /** 处理 EVENT:eventId 标签 —— 触发命名事件（预留扩展） */
     private String handleEvent(GameSession session, String eventId) {
+        if (eventId == null || eventId.isBlank()) {
+            log.warn("EVENT tag missing eventId");
+            return null;
+        }
         log.debug("Event triggered: {}", eventId);
         return null;
     }
 
     /** 处理 AREA:区域名称 标签 —— 更新玩家当前所在区域 */
     private String handleArea(GameSession session, String areaName) {
+        if (areaName == null || areaName.isBlank()) {
+            log.warn("AREA tag missing areaName");
+            return null;
+        }
         areaName = areaName.trim();
         session.setCurrentArea(areaName);
         log.debug("Player area updated to: {}", areaName);

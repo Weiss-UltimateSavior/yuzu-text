@@ -1,5 +1,6 @@
 package com.yuzugame.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;
 
 /**
@@ -19,6 +20,7 @@ import java.util.List;
  *
  * @see com.yuzugame.engine.ConditionEvaluator 条件表达式语法
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class NpcConfig {
     private String id;
     private String name;

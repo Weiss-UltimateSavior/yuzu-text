@@ -1,5 +1,6 @@
 package com.yuzugame.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;
 import java.util.Map;
 
@@ -19,6 +20,7 @@ import java.util.Map;
  *   <li>系统提示词：发送给地图 AI 的场景描述指令</li>
  * </ul></p>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class MapConfig {
     private String id;
     private String name;

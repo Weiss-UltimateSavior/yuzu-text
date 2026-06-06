@@ -49,6 +49,8 @@ public class AdminController {
                                                @RequestParam(defaultValue = "0") int page,
                                                @RequestParam(defaultValue = "20") int size) {
         requireAuth(token);
+        if (size > 100) size = 100;
+        if (size < 1) size = 1;
         return adminService.getFeedbackList(page, size);
     }
 

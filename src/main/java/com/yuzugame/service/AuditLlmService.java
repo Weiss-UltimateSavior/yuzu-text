@@ -2,6 +2,7 @@ package com.yuzugame.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.yuzugame.util.CodeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -47,22 +48,22 @@ public class AuditLlmService {
     private static final long BASE_RETRY_DELAY_MS = 1000;
 
     @Value("${yuzu.audit-llm.base-url:${yuzu.llm.base-url}}")
-    private String baseUrl;
+    private volatile String baseUrl;
 
     @Value("${yuzu.audit-llm.api-key:${yuzu.llm.api-key}}")
-    private String apiKey;
+    private volatile String apiKey;
 
     @Value("${yuzu.audit-llm.model:${yuzu.llm.model}}")
-    private String model;
+    private volatile String model;
 
     public String getBaseUrl() { return baseUrl; }
     public String getApiKey() { return apiKey; }
     public String getModel() { return model; }
 
     public void updateConfig(String baseUrl, String apiKey, String model) {
-        if (baseUrl != null && !baseUrl.isEmpty()) this.baseUrl = baseUrl;
-        if (apiKey != null && !apiKey.isEmpty()) this.apiKey = apiKey;
-        if (model != null && !model.isEmpty()) this.model = model;
+        if (baseUrl != null && !baseUrl.isBlank()) this.baseUrl = baseUrl;
+        if (apiKey != null && !apiKey.isBlank()) this.apiKey = apiKey;
+        if (model != null && !model.isBlank()) this.model = model;
         log.info("AuditLlmService config updated: baseUrl={}, model={}", this.baseUrl, this.model);
     }
 
@@ -136,8 +137,8 @@ public class AuditLlmService {
         StringBuilder json = new StringBuilder();
         json.append("{\"model\":\"").append(model).append("\",\"messages\":[");
 
-        json.append("{\"role\":\"system\",\"content\":").append(jsonEscape(systemPrompt)).append("}");
-        json.append(",{\"role\":\"user\",\"content\":").append(jsonEscape(userMessage)).append("}");
+        json.append("{\"role\":\"system\",\"content\":").append(CodeUtils.jsonEscape(systemPrompt)).append("}");
+        json.append(",{\"role\":\"user\",\"content\":").append(CodeUtils.jsonEscape(userMessage)).append("}");
 
         json.append("],\"temperature\":1,\"max_tokens\":512}");
 
@@ -159,29 +160,5 @@ public class AuditLlmService {
         } catch (Exception e) {
             return "";
         }
-    }
-
-    private String jsonEscape(String text) {
-        StringBuilder sb = new StringBuilder("\"");
-        for (char c : text.toCharArray()) {
-            switch (c) {
-                case '"' -> sb.append("\\\"");
-                case '\\' -> sb.append("\\\\");
-                case '\n' -> sb.append("\\n");
-                case '\r' -> sb.append("\\r");
-                case '\t' -> sb.append("\\t");
-                case '\b' -> sb.append("\\b");
-                case '\f' -> sb.append("\\f");
-                default -> {
-                    if (c < 0x20) {
-                        sb.append(String.format("\\u%04x", (int) c));
-                    } else {
-                        sb.append(c);
-                    }
-                }
-            }
-        }
-        sb.append("\"");
-        return sb.toString();
     }
 }

@@ -1,5 +1,7 @@
 package com.yuzugame.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 /**
  * 物品配置 —— 定义游戏中的可拾取物品。
  *
@@ -13,6 +15,7 @@ package com.yuzugame.model;
  *   <li>描述 —— 物品的详细描述文本</li>
  * </ul></p>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class ItemConfig {
     private String id;
     private String name;

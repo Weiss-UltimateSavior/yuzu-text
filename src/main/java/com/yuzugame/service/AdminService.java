@@ -14,11 +14,18 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class AdminService {
@@ -40,11 +47,38 @@ public class AdminService {
     @Value("${yuzu.admin.password}")
     private String defaultPassword;
 
-    private String adminUsername;
-    private String adminPassword;
+    private volatile String adminUsername;
+    private volatile String adminPasswordHash;
+    private volatile String adminPasswordSalt;
 
-    private String currentToken = null;
-    private long tokenExpiry = 0;
+    private final Map<String, Long> activeTokens = new HashMap<>();
+    private static final long TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+    private final ScheduledExecutorService tokenCleanupScheduler;
+
+    private static final SecureRandom RANDOM = new SecureRandom();
+
+    private static String generateSalt() {
+        byte[] salt = new byte[16];
+        RANDOM.nextBytes(salt);
+        return Base64.getEncoder().encodeToString(salt);
+    }
+
+    private static String hashPassword(String password, String salt) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            md.update(salt.getBytes(StandardCharsets.UTF_8));
+            byte[] hashed = md.digest(password.getBytes(StandardCharsets.UTF_8));
+            return Base64.getEncoder().encodeToString(hashed);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to hash password", e);
+        }
+    }
+
+    private static boolean verifyPassword(String inputPassword, String storedHash, String salt) {
+        if (inputPassword == null || storedHash == null || salt == null) return false;
+        String inputHash = hashPassword(inputPassword, salt);
+        return MessageDigest.isEqual(inputHash.getBytes(StandardCharsets.UTF_8), storedHash.getBytes(StandardCharsets.UTF_8));
+    }
 
     public AdminService(GameSessionRepository sessionRepo,
                         FeedbackRepository feedbackRepo,
@@ -60,6 +94,23 @@ public class AdminService {
         this.auditLlmService = auditLlmService;
         this.inputAuditor = inputAuditor;
         this.context = context;
+        this.tokenCleanupScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "admin-token-cleanup");
+            t.setDaemon(true);
+            return t;
+        });
+        this.tokenCleanupScheduler.scheduleAtFixedRate(this::cleanupExpiredTokens,
+                TOKEN_TTL_MS, TOKEN_TTL_MS, TimeUnit.MILLISECONDS);
+    }
+
+    @PreDestroy
+    void shutdown() {
+        tokenCleanupScheduler.shutdown();
+    }
+
+    private synchronized void cleanupExpiredTokens() {
+        long now = System.currentTimeMillis();
+        activeTokens.entrySet().removeIf(e -> now > e.getValue());
     }
 
     @PostConstruct
@@ -69,17 +120,31 @@ public class AdminService {
             try {
                 Map<String, String> cfg = mapper.readValue(file, Map.class);
                 adminUsername = cfg.get("username");
-                adminPassword = cfg.get("password");
+                adminPasswordHash = cfg.get("passwordHash");
+                adminPasswordSalt = cfg.get("passwordSalt");
+                if (adminPasswordHash == null || adminPasswordSalt == null) {
+                    String legacyPassword = cfg.get("password");
+                    if (legacyPassword != null) {
+                        adminPasswordSalt = generateSalt();
+                        adminPasswordHash = hashPassword(legacyPassword, adminPasswordSalt);
+                        saveAdminConfig();
+                        log.info("Migrated legacy plaintext password to hashed format");
+                    }
+                }
                 log.info("Admin credentials loaded from admin.json");
             } catch (Exception e) {
                 log.warn("Failed to load admin.json, using defaults");
-                adminUsername = defaultUsername;
-                adminPassword = defaultPassword;
+                initDefaultCredentials();
             }
         } else {
-            adminUsername = defaultUsername;
-            adminPassword = defaultPassword;
+            initDefaultCredentials();
         }
+    }
+
+    private void initDefaultCredentials() {
+        adminUsername = defaultUsername;
+        adminPasswordSalt = generateSalt();
+        adminPasswordHash = hashPassword(defaultPassword, adminPasswordSalt);
     }
 
     private File getAdminConfigFile() {
@@ -93,7 +158,8 @@ public class AdminService {
             File file = getAdminConfigFile();
             Map<String, String> cfg = new LinkedHashMap<>();
             cfg.put("username", adminUsername);
-            cfg.put("password", adminPassword);
+            cfg.put("passwordHash", adminPasswordHash);
+            cfg.put("passwordSalt", adminPasswordSalt);
             mapper.writerWithDefaultPrettyPrinter().writeValue(file, cfg);
             log.info("Admin credentials saved to admin.json");
         } catch (Exception e) {
@@ -101,22 +167,26 @@ public class AdminService {
         }
     }
 
-    public String login(String username, String password) {
-        if (!adminUsername.equals(username) || !adminPassword.equals(password)) {
+    public synchronized String login(String username, String password) {
+        if (username == null || password == null) return null;
+        if (adminUsername == null || adminPasswordHash == null || adminPasswordSalt == null) return null;
+        if (!adminUsername.equals(username) || !verifyPassword(password, adminPasswordHash, adminPasswordSalt)) {
             return null;
         }
-        currentToken = UUID.randomUUID().toString().replace("-", "");
-        tokenExpiry = System.currentTimeMillis() + 24 * 60 * 60 * 1000;
-        return currentToken;
+        String token = UUID.randomUUID().toString().replace("-", "");
+        activeTokens.put(token, System.currentTimeMillis() + TOKEN_TTL_MS);
+        return token;
     }
 
-    public boolean validateToken(String token) {
-        if (token == null || currentToken == null) return false;
-        if (System.currentTimeMillis() > tokenExpiry) {
-            currentToken = null;
+    public synchronized boolean validateToken(String token) {
+        if (token == null) return false;
+        Long expiry = activeTokens.get(token);
+        if (expiry == null) return false;
+        if (System.currentTimeMillis() > expiry) {
+            activeTokens.remove(token);
             return false;
         }
-        return currentToken.equals(token);
+        return true;
     }
 
     public Map<String, Object> getPlayerStats() {
@@ -204,16 +274,13 @@ public class AdminService {
 
     public String readDataFile(String filename) {
         if (isProtectedFile(filename)) return null;
-        String dir = dataLoader.getDataDir();
-        if (dir == null || dir.isEmpty()) {
-            dir = "src/main/resources/data";
-        }
-        File file = new File(dir, filename);
-        if (!file.exists()) return null;
+        String dir = resolveDataDir();
         try {
+            File file = resolveSecureFile(dir, filename);
+            if (!file.exists()) return null;
             return java.nio.file.Files.readString(file.toPath());
-        } catch (Exception e) {
-            log.error("Failed to read data file: {}", filename, e);
+        } catch (java.io.IOException e) {
+            log.error("Path validation failed for file: {} - {}", filename, e.getMessage());
             return null;
         }
     }
@@ -233,17 +300,14 @@ public class AdminService {
             log.warn("Invalid JSON content for {}: {}", filename, e.getMessage());
             return false;
         }
-        String dir = dataLoader.getDataDir();
-        if (dir == null || dir.isEmpty()) {
-            dir = "src/main/resources/data";
-        }
-        File file = new File(dir, filename);
+        String dir = resolveDataDir();
         try {
+            File file = resolveSecureFile(dir, filename);
             java.nio.file.Files.writeString(file.toPath(), content);
             log.info("Data file updated: {}", filename);
             return true;
-        } catch (Exception e) {
-            log.error("Failed to write data file: {}", filename, e);
+        } catch (java.io.IOException e) {
+            log.error("Failed to write data file: {} - {}", filename, e.getMessage());
             return false;
         }
     }
@@ -263,10 +327,10 @@ public class AdminService {
             return false;
         }
         adminUsername = username;
-        adminPassword = password;
+        adminPasswordSalt = generateSalt();
+        adminPasswordHash = hashPassword(password, adminPasswordSalt);
         saveAdminConfig();
-        currentToken = null;
-        tokenExpiry = 0;
+        activeTokens.clear();
         log.info("Admin credentials updated");
         return true;
     }
@@ -303,16 +367,26 @@ public class AdminService {
         inputAuditor.setEnabled(enabled);
     }
 
-    public void restart() {
+    private volatile boolean restarting = false;
+
+    public synchronized void restart() {
+        if (restarting) {
+            log.warn("Restart already in progress, ignoring duplicate request");
+            return;
+        }
+        restarting = true;
         log.info("Game restart requested via admin API");
         Thread t = new Thread(() -> {
             try {
-                Thread.sleep(1000);
+                Thread.sleep(2000);
                 context.close();
+                Thread.sleep(1000);
                 SpringApplication.run(YuzuGameApplication.class);
                 log.info("Game restarted successfully");
             } catch (Exception e) {
                 log.error("Failed to restart", e);
+            } finally {
+                restarting = false;
             }
         });
         t.setDaemon(false);
@@ -331,6 +405,15 @@ public class AdminService {
             dir = "src/main/resources/data";
         }
         return dir;
+    }
+
+    private File resolveSecureFile(String dir, String filename) throws java.io.IOException {
+        File baseDir = new File(dir).getCanonicalFile();
+        File target = new File(baseDir, filename).getCanonicalFile();
+        if (!target.getCanonicalPath().startsWith(baseDir.getCanonicalPath() + File.separator) && !target.getCanonicalPath().equals(baseDir.getCanonicalPath())) {
+            throw new java.io.IOException("Path traversal detected: " + filename);
+        }
+        return target;
     }
 
     public byte[] exportAllData() throws Exception {
@@ -380,7 +463,7 @@ public class AdminService {
                 continue;
             }
 
-            File target = new File(folder, name);
+            File target = resolveSecureFile(dir, name);
             java.io.ByteArrayOutputStream fileBaos = new java.io.ByteArrayOutputStream();
             byte[] buf = new byte[4096];
             int len;

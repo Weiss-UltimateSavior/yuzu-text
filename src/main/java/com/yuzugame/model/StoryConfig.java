@@ -1,5 +1,6 @@
 package com.yuzugame.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;
 
 /**
@@ -19,6 +20,7 @@ import java.util.List;
  *
  * @see EndingRuleConfig
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class StoryConfig {
     private List<ChapterDef> chapters;
     private String directorSystemPrompt;
@@ -44,6 +46,7 @@ public class StoryConfig {
      * @return 该回合应扣除的理智值
      */
     public int getSanityDecayForTurn(int turn) {
+        if (sanityDecayCurve == null) return 1;
         for (SanityDecayCurve curve : sanityDecayCurve) {
             if (turn >= curve.getFromTurn() && turn <= curve.getToTurn()) {
                 return curve.getDecayPerTurn();
@@ -55,6 +58,7 @@ public class StoryConfig {
     /**
      * 章节定义 —— 描述游戏的一个叙事阶段。
      */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ChapterDef {
         private String id;
         private String name;
@@ -79,6 +83,7 @@ public class StoryConfig {
      * <p>例如：前 20 回合每回合衰减 1，20~50 回合每回合衰减 2，
      * 50 回合后每回合衰减 3，模拟逐渐加速的理智恶化。</p>
      */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class SanityDecayCurve {
         private int fromTurn;
         private int toTurn;

@@ -1,4 +1,5 @@
 {
   "username" : "yuzu",
-  "password" : "123456"
+  "passwordHash" : "s8BNIZ+vysjn+wJoLwrA6W8uRyD7hS9DoTCzsYwT6kU=",
+  "passwordSalt" : "oh7oOS5idDNgAEgiB318PQ=="
 }

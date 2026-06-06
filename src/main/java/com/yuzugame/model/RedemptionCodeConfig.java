@@ -1,5 +1,6 @@
 package com.yuzugame.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.Map;
 
 /**
@@ -29,6 +30,7 @@ import java.util.Map;
  *   <li>无需修改 Java 代码</li>
  * </ol>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class RedemptionCodeConfig {
 
     private String code;

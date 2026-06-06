@@ -1,5 +1,7 @@
 package com.yuzugame.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 /**
  * 谜题配置 —— 定义游戏中的谜题挑战。
  *
@@ -16,6 +18,7 @@ package com.yuzugame.model;
  *   <li>前置物品：解谜所需的关键物品 ID（可为 null）</li>
  * </ul></p>
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class PuzzleConfig {
     private String id;
     private String name;
