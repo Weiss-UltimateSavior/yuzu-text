@@ -6,9 +6,9 @@ spring:
     name: yuzu-game
 
   datasource:
-    url: jdbc:mysql://${DB_HOST:165.154.43.77}/${DB_NAME:yuzu}?useSSL=true&requireSSL=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
-    username: ${DB_USERNAME:yuzu}
-    password: ${DB_PASSWORD:4ZmjJBG6dpNSK2n7}
+    url: jdbc:mysql://${DB_HOST:localhost}/${DB_NAME:yuzu}?useSSL=true&requireSSL=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 5
@@ -29,25 +29,28 @@ spring:
 
   data:
     redis:
-      host: ${REDIS_HOST:165.154.43.77}
+      host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:redis_yFh7Wx}
+      password: ${REDIS_PASSWORD:}
       timeout: 5000ms
 
 yuzu:
   data-dir: src/main/resources/data
+  field-encryption-key: ${FIELD_ENCRYPTION_KEY:}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
   admin:
-    username: ${ADMIN_USERNAME:yuzu}
-    password: ${ADMIN_PASSWORD:yuzu2026}
+    username: ${ADMIN_USERNAME:}
+    password: ${ADMIN_PASSWORD:}
   llm:
-    base-url: ${LLM_BASE_URL:https://xxxxx/v1}
-    api-key: ${LLM_API_KEY:sk-45SG3Z7sEU4Md8H0oR0T3ZBOy}
+    base-url: ${LLM_BASE_URL:}
+    api-key: ${LLM_API_KEY:}
     model: ${LLM_MODEL:deepseek-ai/deepseek-v4-flash}
   audit-llm:
-    base-url: ${AUDIT_LLM_BASE_URL:https://xxxxx/v1}
-    api-key: ${AUDIT_LLM_API_KEY:sk-ouKkheNKsZmp6UtT26nyrXaW3}
+    base-url: ${AUDIT_LLM_BASE_URL:}
+    api-key: ${AUDIT_LLM_API_KEY:}
     model: ${AUDIT_LLM_MODEL:kimi-k2.5}
 
 logging:
   level:
-    com.yuzugame: DEBUG
+    com.yuzugame: ${LOG_LEVEL:INFO}

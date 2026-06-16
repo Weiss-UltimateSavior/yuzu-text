@@ -4,6 +4,8 @@ import com.yuzugame.service.GameService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 游戏控制器 —— REST API 入口层。
@@ -23,6 +25,16 @@ import java.util.Map;
 public class GameController {
 
     private final GameService gameService;
+
+    /** config-llm 速率限制：每个会话 60 秒内最多 3 次 */
+    private static final long CONFIG_RATE_WINDOW_MS = 60_000;
+    private static final int CONFIG_RATE_MAX = 3;
+    private final ConcurrentHashMap<String, RateLimitEntry> configLlmRateLimit = new ConcurrentHashMap<>();
+
+    static final class RateLimitEntry {
+        final AtomicLong count = new AtomicLong(0);
+        final long windowStart = System.currentTimeMillis();
+    }
 
     public GameController(GameService gameService) {
         this.gameService = gameService;
@@ -108,6 +120,22 @@ public class GameController {
     @PostMapping("/config-llm")
     public Map<String, Object> configureLlm(@RequestBody Map<String, String> body) {
         String sessionId = body.get("sessionId");
+        if (sessionId == null || sessionId.isBlank()) {
+            return Map.of("success", false, "message", "会话ID不能为空");
+        }
+
+        // 速率限制检查
+        long now = System.currentTimeMillis();
+        RateLimitEntry entry = configLlmRateLimit.compute(sessionId, (k, v) -> {
+            if (v == null || now - v.windowStart > CONFIG_RATE_WINDOW_MS) {
+                return new RateLimitEntry();
+            }
+            return v;
+        });
+        if (entry.count.incrementAndGet() > CONFIG_RATE_MAX) {
+            return Map.of("success", false, "message", "操作过于频繁，请稍后再试");
+        }
+
         String baseUrl = body.get("baseUrl");
         String apiKey = body.get("apiKey");
         String model = body.get("model");

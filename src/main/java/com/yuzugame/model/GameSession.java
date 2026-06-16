@@ -31,6 +31,9 @@ import java.util.*;
  */
 public class GameSession {
 
+    /** 聊天历史最大条目数，超出时自动裁剪旧消息 */
+    private static final int MAX_CHAT_HISTORY = 200;
+
     private String sessionId;
     private Player player = new Player();
     private String currentMapId;
@@ -159,6 +162,10 @@ public class GameSession {
     public void setChatHistory(List<ChatMessage> chatHistory) { this.chatHistory = new ArrayList<>(chatHistory); }
     public void addChatMessage(ChatMessage msg) {
         chatHistory.add(msg);
+        // 限制聊天历史最大条目数，避免内存和存储膨胀
+        if (chatHistory.size() > MAX_CHAT_HISTORY) {
+            chatHistory.subList(0, chatHistory.size() - MAX_CHAT_HISTORY).clear();
+        }
     }
 
     public boolean isEnded() { return ended; }

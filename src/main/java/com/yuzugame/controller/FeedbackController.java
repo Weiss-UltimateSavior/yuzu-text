@@ -66,11 +66,38 @@ public class FeedbackController {
         return entry.count.incrementAndGet() > MAX_SUBMISSIONS_PER_IP;
     }
 
+    /**
+     * 解析客户端真实 IP。
+     * 优先使用 X-Forwarded-For 的最后一个可信代理之前的 IP，
+     * 但仅当请求来自可信代理时才信任该头，否则使用 remoteAddr。
+     */
+    private String resolveClientIp(String forwardedFor, jakarta.servlet.http.HttpServletRequest request) {
+        // 如果存在反向代理，X-Forwarded-For 最右边的不可伪造条目是代理添加的
+        // 简化策略：如果 X-Forwarded-For 存在，取第一个（最原始客户端），
+        // 但需验证 remoteAddr 是本机/内网代理（生产环境应配置可信代理列表）
+        String remoteAddr = request.getRemoteAddr();
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            // 仅当请求来自本机或内网时信任 X-Forwarded-For
+            if (isTrustedProxy(remoteAddr)) {
+                return forwardedFor.split(",")[0].trim();
+            }
+        }
+        return remoteAddr;
+    }
+
+    private boolean isTrustedProxy(String addr) {
+        return "127.0.0.1".equals(addr) || "0:0:0:0:0:0:0:1".equals(addr)
+                || addr.startsWith("10.") || addr.startsWith("192.168.")
+                || addr.startsWith("172.16.") || addr.startsWith("172.17.")
+                || addr.startsWith("172.18.") || addr.startsWith("172.19.")
+                || addr.startsWith("172.2") || addr.startsWith("172.3");
+    }
+
     @PostMapping("/submit")
     public Map<String, Object> submit(@RequestBody Map<String, String> body,
                                       @RequestHeader(value = "X-Forwarded-For", required = false) String forwardedFor,
                                       jakarta.servlet.http.HttpServletRequest request) {
-        String ip = forwardedFor != null ? forwardedFor.split(",")[0].trim() : request.getRemoteAddr();
+        String ip = resolveClientIp(forwardedFor, request);
         if (isRateLimited(ip)) {
             return Map.of("ok", false, "error", "提交过于频繁，请稍后再试");
         }

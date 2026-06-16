@@ -11,14 +11,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.io.File;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -49,36 +47,12 @@ public class AdminService {
 
     private volatile String adminUsername;
     private volatile String adminPasswordHash;
-    private volatile String adminPasswordSalt;
 
     private final Map<String, Long> activeTokens = new HashMap<>();
     private static final long TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
     private final ScheduledExecutorService tokenCleanupScheduler;
 
-    private static final SecureRandom RANDOM = new SecureRandom();
-
-    private static String generateSalt() {
-        byte[] salt = new byte[16];
-        RANDOM.nextBytes(salt);
-        return Base64.getEncoder().encodeToString(salt);
-    }
-
-    private static String hashPassword(String password, String salt) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            md.update(salt.getBytes(StandardCharsets.UTF_8));
-            byte[] hashed = md.digest(password.getBytes(StandardCharsets.UTF_8));
-            return Base64.getEncoder().encodeToString(hashed);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to hash password", e);
-        }
-    }
-
-    private static boolean verifyPassword(String inputPassword, String storedHash, String salt) {
-        if (inputPassword == null || storedHash == null || salt == null) return false;
-        String inputHash = hashPassword(inputPassword, salt);
-        return MessageDigest.isEqual(inputHash.getBytes(StandardCharsets.UTF_8), storedHash.getBytes(StandardCharsets.UTF_8));
-    }
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder(12);
 
     public AdminService(GameSessionRepository sessionRepo,
                         FeedbackRepository feedbackRepo,
@@ -121,15 +95,19 @@ public class AdminService {
                 Map<String, String> cfg = mapper.readValue(file, Map.class);
                 adminUsername = cfg.get("username");
                 adminPasswordHash = cfg.get("passwordHash");
-                adminPasswordSalt = cfg.get("passwordSalt");
-                if (adminPasswordHash == null || adminPasswordSalt == null) {
-                    String legacyPassword = cfg.get("password");
-                    if (legacyPassword != null) {
-                        adminPasswordSalt = generateSalt();
-                        adminPasswordHash = hashPassword(legacyPassword, adminPasswordSalt);
-                        saveAdminConfig();
-                        log.info("Migrated legacy plaintext password to hashed format");
-                    }
+                // 兼容旧版 SHA-256 格式：如果存在 salt 字段，说明是旧格式，需要迁移
+                String legacySalt = cfg.get("passwordSalt");
+                String legacyPassword = cfg.get("password");
+                if (adminPasswordHash != null && legacySalt != null) {
+                    // 旧格式 SHA-256 哈希，无法直接迁移（不可逆），需要重置
+                    log.warn("Detected legacy SHA-256 password hash, resetting to default password. Please update via admin panel.");
+                    adminPasswordHash = passwordEncoder.encode(defaultPassword);
+                    saveAdminConfig();
+                } else if (adminPasswordHash == null && legacyPassword != null) {
+                    // 更早的明文密码格式
+                    adminPasswordHash = passwordEncoder.encode(legacyPassword);
+                    saveAdminConfig();
+                    log.info("Migrated legacy plaintext password to BCrypt format");
                 }
                 log.info("Admin credentials loaded from admin.json");
             } catch (Exception e) {
@@ -143,8 +121,7 @@ public class AdminService {
 
     private void initDefaultCredentials() {
         adminUsername = defaultUsername;
-        adminPasswordSalt = generateSalt();
-        adminPasswordHash = hashPassword(defaultPassword, adminPasswordSalt);
+        adminPasswordHash = passwordEncoder.encode(defaultPassword);
     }
 
     private File getAdminConfigFile() {
@@ -159,7 +136,6 @@ public class AdminService {
             Map<String, String> cfg = new LinkedHashMap<>();
             cfg.put("username", adminUsername);
             cfg.put("passwordHash", adminPasswordHash);
-            cfg.put("passwordSalt", adminPasswordSalt);
             mapper.writerWithDefaultPrettyPrinter().writeValue(file, cfg);
             log.info("Admin credentials saved to admin.json");
         } catch (Exception e) {
@@ -169,8 +145,8 @@ public class AdminService {
 
     public synchronized String login(String username, String password) {
         if (username == null || password == null) return null;
-        if (adminUsername == null || adminPasswordHash == null || adminPasswordSalt == null) return null;
-        if (!adminUsername.equals(username) || !verifyPassword(password, adminPasswordHash, adminPasswordSalt)) {
+        if (adminUsername == null || adminPasswordHash == null) return null;
+        if (!adminUsername.equals(username) || !passwordEncoder.matches(password, adminPasswordHash)) {
             return null;
         }
         String token = UUID.randomUUID().toString().replace("-", "");
@@ -207,14 +183,12 @@ public class AdminService {
     }
 
     public Map<String, Object> getFeedbackList(int page, int size) {
-        List<Feedback> all = feedbackRepo.findAllByOrderByCreatedAtDesc();
-        int total = all.size();
-        int from = Math.min(page * size, total);
-        int to = Math.min(from + size, total);
-        List<Feedback> pageData = all.subList(from, to);
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size);
+        org.springframework.data.domain.Page<Feedback> feedbackPage = feedbackRepo.findAllByOrderByCreatedAtDesc(pageable);
+        long total = feedbackPage.getTotalElements();
 
         List<Map<String, Object>> items = new ArrayList<>();
-        for (Feedback f : pageData) {
+        for (Feedback f : feedbackPage.getContent()) {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("id", f.getId());
             item.put("contact", f.getContact() != null ? f.getContact() : "");
@@ -327,8 +301,7 @@ public class AdminService {
             return false;
         }
         adminUsername = username;
-        adminPasswordSalt = generateSalt();
-        adminPasswordHash = hashPassword(password, adminPasswordSalt);
+        adminPasswordHash = passwordEncoder.encode(password);
         saveAdminConfig();
         activeTokens.clear();
         log.info("Admin credentials updated");

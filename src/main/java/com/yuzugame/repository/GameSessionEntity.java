@@ -4,6 +4,7 @@ import com.yuzugame.model.GameSession;
 import com.yuzugame.model.Player;
 import com.yuzugame.model.PuzzleMemoryEntry;
 import com.yuzugame.repository.JsonConverters.*;
+import com.yuzugame.util.CryptoUtils;
 import jakarta.persistence.*;
 
 import java.time.Instant;
@@ -121,6 +122,10 @@ public class GameSessionEntity {
     public GameSessionEntity() {}
 
     public static GameSessionEntity fromModel(GameSession session) {
+        return fromModel(session, null);
+    }
+
+    public static GameSessionEntity fromModel(GameSession session, String encryptionKey) {
         GameSessionEntity e = new GameSessionEntity();
         e.sessionId = session.getSessionId();
         e.player = session.getPlayer();
@@ -150,13 +155,19 @@ public class GameSessionEntity {
         e.ended = session.isEnded();
         e.endingType = session.getEndingType();
         e.customLlmBaseUrl = session.getCustomLlmBaseUrl();
-        e.customLlmApiKey = session.getCustomLlmApiKey();
+        e.customLlmApiKey = encryptionKey != null && session.getCustomLlmApiKey() != null
+                ? CryptoUtils.encryptWithPrefix(session.getCustomLlmApiKey(), encryptionKey)
+                : session.getCustomLlmApiKey();
         e.customLlmModel = session.getCustomLlmModel();
         e.updatedAt = Instant.now();
         return e;
     }
 
     public GameSession toModel() {
+        return toModel(null);
+    }
+
+    public GameSession toModel(String encryptionKey) {
         GameSession s = new GameSession();
         s.setSessionId(sessionId);
         s.setPlayer(player != null ? player : new Player());
@@ -192,7 +203,9 @@ public class GameSessionEntity {
         s.setEnded(ended);
         s.setEndingType(endingType);
         s.setCustomLlmBaseUrl(customLlmBaseUrl);
-        s.setCustomLlmApiKey(customLlmApiKey);
+        s.setCustomLlmApiKey(encryptionKey != null && customLlmApiKey != null
+                ? CryptoUtils.decryptWithPrefix(customLlmApiKey, encryptionKey)
+                : customLlmApiKey);
         s.setCustomLlmModel(customLlmModel);
         return s;
     }

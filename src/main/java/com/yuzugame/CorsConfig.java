@@ -10,14 +10,22 @@ import org.springframework.web.filter.CorsFilter;
 @Configuration
 public class CorsConfig {
 
-    @Value("${yuzu.cors.allowed-origins:http://localhost:*}")
+    @Value("${yuzu.cors.allowed-origins:}")
     private String allowedOrigins;
 
     @Bean
     public CorsFilter corsFilter() {
         CorsConfiguration config = new CorsConfiguration();
-        for (String origin : allowedOrigins.split(",")) {
-            config.addAllowedOriginPattern(origin.trim());
+        if (allowedOrigins != null && !allowedOrigins.isBlank()) {
+            for (String origin : allowedOrigins.split(",")) {
+                String trimmed = origin.trim();
+                if (!trimmed.isEmpty()) {
+                    config.addAllowedOriginPattern(trimmed);
+                }
+            }
+        } else {
+            // 开发模式默认允许 localhost
+            config.addAllowedOriginPattern("http://localhost:*");
         }
         config.addAllowedMethod("*");
         config.addAllowedHeader("*");

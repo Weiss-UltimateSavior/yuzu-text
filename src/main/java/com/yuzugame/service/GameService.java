@@ -8,6 +8,7 @@ import com.yuzugame.repository.GameSessionEntity;
 import com.yuzugame.repository.GameSessionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -51,6 +52,9 @@ public class GameService {
     private final GameDataLoader dataLoader;
 
     private final LlmService llmService;
+
+    @Value("${yuzu.field-encryption-key:}")
+    private String fieldEncryptionKey;
 
     public GameService(GameEngine engine, GameSessionRepository repository,
                        StringRedisTemplate redisTemplate, ObjectMapper objectMapper,
@@ -233,12 +237,12 @@ public class GameService {
 
         RedemptionCodeConfig config = dataLoader.getRedemptionCode(code.trim());
         if (config == null) {
-            return Map.of("success", false, "message", "无效的兑换码: " + code.trim());
+            return Map.of("success", false, "message", "兑换码无效");
         }
 
         int usedCount = session.getRedemptionCodeUseCount(config.getCode());
         if (config.getMaxUses() > 0 && usedCount >= config.getMaxUses()) {
-            return Map.of("success", false, "message", "兑换码 " + config.getCode() + " 已使用" + usedCount + "次，达到上限");
+            return Map.of("success", false, "message", "该兑换码已达到使用上限");
         }
 
         Map<String, Integer> rewards = config.getRewards();
@@ -302,7 +306,7 @@ public class GameService {
         try {
             Optional<GameSessionEntity> entity = repository.findById(sessionId);
             if (entity.isPresent()) {
-                GameSession session = entity.get().toModel();
+                GameSession session = entity.get().toModel(resolveEncryptionKey());
                 cacheToRedis(session);
                 return session;
             }
@@ -322,7 +326,7 @@ public class GameService {
         boolean saved = false;
         for (int attempt = 1; attempt <= 3 && !saved; attempt++) {
             try {
-                GameSessionEntity entity = GameSessionEntity.fromModel(session);
+                GameSessionEntity entity = GameSessionEntity.fromModel(session, resolveEncryptionKey());
                 repository.findById(session.getSessionId()).ifPresent(existing -> {
                     entity.setCreatedAt(existing.getCreatedAt());
                 });
@@ -362,6 +366,13 @@ public class GameService {
         } catch (Exception e) {
             log.warn("Failed to evict Redis cache for session {}: {}", sessionId, e.getMessage());
         }
+    }
+
+    /**
+     * 获取字段加密密钥，仅在配置了 FIELD_ENCRYPTION_KEY 时启用加密。
+     */
+    private String resolveEncryptionKey() {
+        return (fieldEncryptionKey != null && !fieldEncryptionKey.isBlank()) ? fieldEncryptionKey : null;
     }
 
     private Map<String, Object> getState(GameSession session) {
