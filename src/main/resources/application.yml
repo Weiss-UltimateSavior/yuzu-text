@@ -40,12 +40,12 @@ yuzu:
     username: ${ADMIN_USERNAME:yuzu}
     password: ${ADMIN_PASSWORD:yuzu2026}
   llm:
-    base-url: ${LLM_BASE_URL:https://api.rinne.cyou/v1}
-    api-key: ${LLM_API_KEY:sk-45SG3Z7sEU4Md8H0oR0T3ZBOyQmXiItfvF0d3V4ey5jqp7NY}
+    base-url: ${LLM_BASE_URL:https://xxxxx/v1}
+    api-key: ${LLM_API_KEY:sk-45SG3Z7sEU4Md8H0oR0T3ZBOy}
     model: ${LLM_MODEL:deepseek-ai/deepseek-v4-flash}
   audit-llm:
-    base-url: ${AUDIT_LLM_BASE_URL:https://api.moonshot.cn/v1}
-    api-key: ${AUDIT_LLM_API_KEY:sk-ouKkheNKsZmp6UtT26nyrXaW3NrVdA6oRJaw04S0d3LoaVZR}
+    base-url: ${AUDIT_LLM_BASE_URL:https://xxxxx/v1}
+    api-key: ${AUDIT_LLM_API_KEY:sk-ouKkheNKsZmp6UtT26nyrXaW3}
     model: ${AUDIT_LLM_MODEL:kimi-k2.5}
 
 logging:
