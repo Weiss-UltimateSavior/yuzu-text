@@ -8,6 +8,8 @@
 - **控制标签 DSL** — AI 通过 `<ctrl>` 标签块与引擎通信，实现叙事文本与游戏状态的彻底解耦
 - **全配置驱动** — 地图、NPC、谜题、物品、结局、提示词、数值规则全部通过 JSON 配置，无需修改代码即可创建全新游戏
 - **双层 LLM 安全** — 游戏叙事 LLM 与输入审核 LLM 完全隔离，防止提示词注入攻击
+- **敏感字段加密** — 用户自定义 API Key 使用 AES-256-GCM 加密存储，密钥通过环境变量管理
+- **API 速率限制** — 关键接口（LLM 配置、反馈提交）内置速率限制，防止滥用
 - **二级缓存架构** — Redis 活跃会话缓存 + MySQL 持久化，支持断线重连与会话恢复
 - **管理端支持** — 内置完整的管理后台 API，支持在线编辑配置、LLM 热切换、数据导入导出、玩家统计
 - **会话级 LLM 配置** — 每个游戏会话可独立配置 LLM API，支持玩家自带 API Key
@@ -48,11 +50,12 @@
                             │
 ┌───────────────────────────▼───────────────────────────────────┐
 │                    Service 层                                    │
-│  GameService ─── 会话管理 · Redis/MySQL 二级缓存 · 兑换码逻辑      │
-│  LlmService ─── 游戏叙事 LLM 通信层 (OpenAI 兼容格式)             │
-│  AuditLlmService ── 输入审核 LLM 通信层 (独立隔离)                │
+│  GameService ─── 会话管理 · Redis/MySQL 二级缓存 · 兑换码逻辑 · 字段加密      │
+│  BaseLlmService ── LLM 通信基类 (原子配置/JSON构建/重试)                       │
+│  LlmService ─── 游戏叙事 LLM 通信层 (继承BaseLlmService/自定义TLS)            │
+│  AuditLlmService ── 输入审核 LLM 通信层 (继承BaseLlmService/独立隔离)          │
 │  InputAuditor ── 输入审核 (提示词注入检测 · Fail-Closed 策略)      │
-│  AdminService ── 管理端服务 (认证/统计/数据/LLM配置/重启)          │
+│  AdminService ── 管理端服务 (BCrypt认证/统计/数据/LLM配置/重启)     │
 └───────────────────────────┬───────────────────────────────────┘
                             │
 ┌───────────────────────────▼───────────────────────────────────┐
@@ -133,13 +136,15 @@ com.yuzugame/
 │   ├── FeedbackRepository   反馈 JPA 仓库
 │   └── JsonConverters       JSON 类型转换器 (8种)
 ├── service/         # 服务层
-│   ├── GameService       会话管理/缓存/兑换码/会话级LLM配置
-│   ├── LlmService        LLM 通信层 (OpenAI兼容/重试/自定义TLS)
-│   ├── AuditLlmService   审核LLM通信层 (独立隔离)
-│   ├── AdminService      管理端服务 (认证/统计/数据/LLM配置/导入导出/重启)
+│   ├── BaseLlmService    LLM 通信基类 (OpenAI兼容/原子配置/JSON构建/重试)
+│   ├── LlmService        游戏叙事LLM (继承BaseLlmService/自定义TLS)
+│   ├── AuditLlmService   审核LLM通信层 (继承BaseLlmService/独立隔离)
+│   ├── GameService       会话管理/缓存/兑换码/会话级LLM配置/字段加密
+│   ├── AdminService      管理端服务 (BCrypt认证/统计/数据/LLM配置/导入导出/重启)
 │   └── InputAuditor      输入审核 (提示词注入检测/Fail-Closed)
 └── util/            # 工具类
-    └── CodeUtils        兑换码规范化
+    ├── CodeUtils        兑换码规范化
+    └── CryptoUtils      AES-256-GCM 字段加密 (敏感数据加密存储/ENC:前缀标识)
 ```
 
 ***
@@ -438,6 +443,8 @@ processMessage()
 | POST | `/api/game/redeem`     | 兑换码      | `{ "sessionId": "xxx", "code": "YUZU_SANITY_20" }`                          |
 | POST | `/api/game/config-llm` | 会话级LLM配置 | `{ "sessionId": "xxx", "baseUrl": "...", "apiKey": "...", "model": "..." }` |
 
+> **速率限制**：`/api/game/config-llm` 每会话 60 秒内最多 3 次请求。
+
 #### 创建新游戏
 
 ```json
@@ -469,7 +476,7 @@ processMessage()
 
 #### 会话级 LLM 配置
 
-每个游戏会话可独立配置 LLM API，支持玩家自带 API Key。配置前会自动校验 API 可用性：
+每个游戏会话可独立配置 LLM API，支持玩家自带 API Key。配置前会自动校验 API 可用性。自定义 API Key 在数据库中使用 AES-256-GCM 加密存储（需配置 `FIELD_ENCRYPTION_KEY` 环境变量）：
 
 ```json
 // POST /api/game/config-llm
@@ -523,6 +530,8 @@ processMessage()
 - `contact` 选填，最大 128 字
 - `sessionId` 选填，关联游戏会话
 
+> **速率限制**：每 IP 60 分钟内最多 5 次提交。
+
 ### 管理端接口 (`/api/admin`)
 
 所有管理端接口（除登录外）需在请求头携带 `X-Admin-Token`。
@@ -547,11 +556,15 @@ processMessage()
 | PUT  | `/api/admin/auditor/status`    | 设置审核开关     |
 | POST | `/api/admin/restart`           | 重启服务       |
 
+> 反馈列表支持数据库分页：`?page=0&size=20`（默认 page=0, size=20），返回含 `totalElements`、`totalPages`、`content` 的分页结构。
+
 #### 认证机制
 
+- 密码使用 BCrypt 哈希存储（cost factor = 12）
 - 登录成功返回 Token，有效期 24 小时
 - 修改管理员账号密码后旧 Token 立即失效
 - 凭证持久化到 `data/admin.json`，重启后仍有效
+- 旧版 SHA-256 密码自动检测并迁移到 BCrypt
 - Token 无效或过期时返回 HTTP 401
 
 #### LLM 配置
@@ -579,7 +592,7 @@ processMessage()
 
 ### 双层 LLM 隔离
 
-游戏叙事 LLM（`LlmService`）与输入审核 LLM（`AuditLlmService`）完全隔离：
+游戏叙事 LLM（`LlmService`）与输入审核 LLM（`AuditLlmService`）完全隔离，均继承自 `BaseLlmService` 基类：
 
 | 维度   | 游戏叙事 LLM          | 输入审核 LLM            |
 | ---- | ----------------- | ------------------- |
@@ -597,18 +610,47 @@ processMessage()
 3. 若审核 LLM 自身故障，采用 **Fail-Closed** 策略：拦截输入并返回 `failClosedMessage`
 4. 审核服务可通过管理端 API 动态开关
 
+### 敏感字段加密存储
+
+用户自定义 LLM API Key 等敏感字段使用 AES-256-GCM 认证加密存储：
+
+- 加密工具：`CryptoUtils`，每次加密生成随机 12 字节 IV
+- 密文格式：`ENC:` + Base64(IV + ciphertext + GCM tag)
+- 加密密钥通过环境变量 `FIELD_ENCRYPTION_KEY` 配置（Base64 编码的 256 位密钥）
+- 读取时自动检测 `ENC:` 前缀，未加密的旧数据兼容直通
+- 密钥为空时跳过加密，兼容开发环境
+
 ### 管理端认证
 
+- 密码使用 BCrypt 哈希存储（cost factor = 12），替代不安全的 SHA-256
 - Token 认证机制，24 小时有效期
 - 修改凭证后旧 Token 立即失效
 - 保护文件（`admin.json`）禁止通过 API 读写
 - 数据文件写入前校验 JSON 格式合法性
+- 旧版 SHA-256 密码自动检测并迁移到 BCrypt
+
+### API 速率限制
+
+| 端点                    | 限制              | 说明                   |
+| --------------------- | --------------- | -------------------- |
+| `/api/game/config-llm` | 3 次 / 60 秒 / 会话 | 防止 LLM 配置接口滥用        |
+| `/api/feedback/submit` | 5 次 / 60 分钟 / IP | 防止反馈接口刷量             |
+
+- 使用 `ConcurrentHashMap` + 滑动窗口实现
+- 反馈接口 IP 解析：仅在请求来自可信代理（RFC1918 地址 + localhost）时信任 `X-Forwarded-For`，防止 IP 伪造
+
+### CORS 配置
+
+- 允许的来源通过环境变量 `CORS_ALLOWED_ORIGINS` 配置（逗号分隔）
+- 未配置时默认允许 `localhost:*` 和 `https://165.154.43.77:*`（开发/同服务器前端）
+- 生产环境必须显式配置，避免过度暴露
 
 ### LLM 通信安全
 
 - `LlmService` 使用自定义 TLSv1.2 SSL 上下文，解决 API 兼容性问题
 - API Key 在管理端返回时自动脱敏
 - 会话级 LLM 配置在设置前自动校验 API 可用性
+- 自定义 API Key 在数据库中加密存储，仅在使用时解密
 
 ***
 
@@ -625,7 +667,7 @@ processMessage()
 
 ### 配置
 
-编辑 `src/main/resources/application.yml`：
+编辑 `src/main/resources/application.yml`，所有敏感配置通过环境变量注入：
 
 ```yaml
 server:
@@ -633,34 +675,60 @@ server:
 
 spring:
   datasource:
-    url: jdbc:mysql://<MySQL地址>/<数据库名>?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
-    username: <用户名>
-    password: <密码>
+    url: jdbc:mysql://${DB_HOST:localhost}/${DB_NAME:yuzu}?useSSL=true&requireSSL=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
   jpa:
     hibernate:
       ddl-auto: update    # 首次启动自动建表
   data:
     redis:
-      host: <Redis地址>
-      port: 6379
-      password: <Redis密码>
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
 
 yuzu:
-  data-dir: src/main/resources/data   # JSON 配置文件目录
+  data-dir: src/main/resources/data
+  field-encryption-key: ${FIELD_ENCRYPTION_KEY:}    # AES-256 字段加密密钥 (Base64)
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}        # 逗号分隔的允许来源
   admin:
-    username: <管理员用户名>
-    password: <管理员密码>
+    username: ${ADMIN_USERNAME:}
+    password: ${ADMIN_PASSWORD:}
   llm:
-    base-url: <游戏叙事LLM API地址>
-    api-key: <API密钥>
-    model: <模型名称>
+    base-url: ${LLM_BASE_URL:}
+    api-key: ${LLM_API_KEY:}
+    model: ${LLM_MODEL:deepseek-ai/deepseek-v4-flash}
   audit-llm:
-    base-url: <审核LLM API地址>       # 可选，默认复用 llm 配置
-    api-key: <审核API密钥>             # 可选
-    model: <审核模型名称>               # 可选
+    base-url: ${AUDIT_LLM_BASE_URL:}
+    api-key: ${AUDIT_LLM_API_KEY:}
+    model: ${AUDIT_LLM_MODEL:kimi-k2.5}
+
+logging:
+  level:
+    com.yuzugame: ${LOG_LEVEL:INFO}
 ```
 
-> **注意**：`application.yml` 中包含敏感信息（数据库密码、API Key 等），请勿提交到公开仓库。建议使用环境变量或配置中心管理。
+#### 必需环境变量
+
+| 环境变量                  | 说明                    | 示例                          |
+| --------------------- | --------------------- | --------------------------- |
+| `DB_HOST`             | MySQL 地址              | `165.154.43.77`             |
+| `DB_USERNAME`         | MySQL 用户名             | `yuzu`                      |
+| `DB_PASSWORD`         | MySQL 密码              | —                           |
+| `REDIS_HOST`          | Redis 地址              | `165.154.43.77`             |
+| `REDIS_PASSWORD`      | Redis 密码              | —                           |
+| `ADMIN_USERNAME`      | 管理员用户名               | `admin`                     |
+| `ADMIN_PASSWORD`      | 管理员初始密码              | —                           |
+| `LLM_BASE_URL`        | 游戏叙事 LLM API 地址      | `https://api.example.com/v1` |
+| `LLM_API_KEY`         | 游戏 LLM API 密钥         | `sk-xxx`                    |
+| `AUDIT_LLM_BASE_URL`  | 审核 LLM API 地址         | `https://api.example.com/v1` |
+| `AUDIT_LLM_API_KEY`   | 审核 LLM API 密钥         | `sk-xxx`                    |
+| `FIELD_ENCRYPTION_KEY` | 字段加密密钥 (Base64)       | 运行 `CryptoUtils.generateKey()` 生成 |
+| `CORS_ALLOWED_ORIGINS` | CORS 允许来源 (逗号分隔)      | `https://example.com,https://app.example.com` |
+| `LOG_LEVEL`           | 日志级别 (可选，默认 INFO)    | `DEBUG`                     |
+
+> **注意**：所有密码和 API Key 均不设默认值，必须通过环境变量提供。`FIELD_ENCRYPTION_KEY` 用于加密存储用户自定义 LLM API Key，未设置时敏感字段将以明文存储。
 
 ### 构建与启动
 
@@ -769,6 +837,8 @@ JPA 配置 `ddl-auto: update`，首次启动时自动创建所需表：
 | 缓存       | Spring Data Redis                             | —     |
 | 数据库      | MySQL                                         | 5.7+  |
 | JSON     | Jackson (jackson-databind)                    | —     |
+| 密码哈希     | Spring Security Crypto (BCrypt)               | —     |
+| 字段加密     | AES-256-GCM (Javax Crypto)                    | —     |
 | 构建工具     | Maven                                         | 3.6+  |
 | Java     | OpenJDK                                       | 17    |
 | 游戏叙事 LLM | DeepSeek V4 Flash (via OpenAI-compatible API) | —     |
