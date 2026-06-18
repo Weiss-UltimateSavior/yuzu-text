@@ -8,35 +8,24 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
 @Component
-public class DirectorAI {
+public class DirectorAI extends BaseAgent {
 
     private static final Logger log = LoggerFactory.getLogger(DirectorAI.class);
 
-    private final LlmService llm;
     private final GameDataLoader dataLoader;
 
     public DirectorAI(LlmService llm, GameDataLoader dataLoader) {
-        this.llm = llm;
+        super(llm);
         this.dataLoader = dataLoader;
     }
 
     private PromptsConfig.DirectorPrompts prompts() {
         return dataLoader.getPrompts().getDirector();
-    }
-
-    private String chatWithSession(GameSession session, String systemPrompt, String userMessage) {
-        return chatWithSession(session, systemPrompt, userMessage, null);
-    }
-
-    private String chatWithSession(GameSession session, String systemPrompt, String userMessage, List<Map<String, String>> history) {
-        if (session != null && session.hasCustomLlm()) {
-            return llm.chat(systemPrompt, userMessage, history, session.getCustomLlmBaseUrl(), session.getCustomLlmApiKey(), session.getCustomLlmModel());
-        }
-        return llm.chat(systemPrompt, userMessage, history);
     }
 
     public String openingMonologue(GameSession session, StoryConfig story, MapConfig startMap) {
@@ -93,6 +82,12 @@ public class DirectorAI {
         return chatWithSession(session, prompt, context.toString());
     }
 
+    /**
+     * 解析结局叙事提示 —— 三级回退：规则配置 → 默认提示映射 → 通用兜底。
+     *
+     * <p>D2 修复：对未知 endingType 不再硬回退到 FAIL 提示，
+     * 而是使用通用的"结局已触发"兜底文案。</p>
+     */
     private String resolveNarrativeHint(String endingType) {
         List<EndingRuleConfig> rules = dataLoader.getEndingRules();
         if (rules != null) {
@@ -106,8 +101,13 @@ public class DirectorAI {
         if (hints != null && hints.containsKey(endingType)) {
             return hints.get(endingType);
         }
+        // D2 修复：未知结局类型使用通用兜底，而非 FAIL 提示
+        String genericFallback = "结局已触发，请生成对应的结局叙事。";
+        if (hints != null && hints.containsKey("FAIL") && "FAIL".equals(endingType)) {
+            return hints.get("FAIL");
+        }
         String failHint = prompts().getEndingDefaultFailHint();
-        return hints != null ? hints.getOrDefault("FAIL", failHint) : failHint;
+        return "FAIL".equals(endingType) && failHint != null ? failHint : genericFallback;
     }
 
     public String sanityWarning(GameSession session, MapConfig currentMap, StoryConfig story) {
@@ -145,10 +145,21 @@ public class DirectorAI {
         return nullToEmpty(story.getDirectorSystemPrompt()) + "\n\n=== 当前游戏状态 ===\n" + template;
     }
 
+    /**
+     * D1 修复：结局规则按条件数量降序匹配，条件越多的规则优先级越高，
+     * 避免宽泛规则吞掉精确规则。
+     */
     public String determineEndingAction(GameSession session, StoryConfig story) {
         List<EndingRuleConfig> rules = dataLoader.getEndingRules();
         if (rules == null) return null;
-        for (EndingRuleConfig rule : rules) {
+
+        // 按条件数量降序排列，条件越多的规则越具体，优先匹配
+        List<EndingRuleConfig> sortedRules = rules.stream()
+                .filter(r -> r.getConditions() != null && !r.getConditions().isEmpty())
+                .sorted(Comparator.comparingInt((EndingRuleConfig r) -> r.getConditions().size()).reversed())
+                .toList();
+
+        for (EndingRuleConfig rule : sortedRules) {
             boolean conditionsMet = evaluateEndingConditions(session, rule);
             if (!conditionsMet) continue;
 
@@ -190,6 +201,10 @@ public class DirectorAI {
         return isAnd;
     }
 
+    /**
+     * D3 修复：增加 Boolean 类型字段支持（如 exitUnlocked），
+     * 并在 resolveFieldValue 中映射更多字段。
+     */
     private boolean evaluateSingleCondition(GameSession session, EndingRuleConfig.EndingCondition cond) {
         if (cond.getField() == null || cond.getOperator() == null || cond.getValue() == null) {
             return false;
@@ -225,9 +240,23 @@ public class DirectorAI {
             };
         }
 
+        // D3 修复：支持 Boolean 类型字段
+        if (fieldValue instanceof Boolean fieldBool) {
+            boolean expected = Boolean.parseBoolean(String.valueOf(expectedValue));
+            return switch (op) {
+                case "eq"  -> fieldBool == expected;
+                case "neq" -> fieldBool != expected;
+                default    -> false;
+            };
+        }
+
         return false;
     }
 
+    /**
+     * D3 修复：增加 exitUnlocked、ended 等 Boolean 字段映射，
+     * 以及 aliveNpcCount 数值字段。
+     */
     private Object resolveFieldValue(GameSession session, String field) {
         return switch (field) {
             case "player.sanity"     -> session.getPlayer().getSanity();
@@ -236,20 +265,10 @@ public class DirectorAI {
             case "currentChapter"    -> session.getCurrentChapter();
             case "turn"              -> session.getTurn();
             case "score"             -> session.getScore();
+            case "exitUnlocked"      -> session.isExitUnlocked();
+            case "ended"             -> session.isEnded();
+            case "aliveNpcCount"     -> session.getAliveNpcCount();
             default                  -> null;
         };
-    }
-
-    private static String nullToEmpty(String s) {
-        return s != null ? s : "";
-    }
-
-    private static String safeReplace(String template, String... pairs) {
-        if (template == null) return "";
-        String result = template;
-        for (int i = 0; i + 1 < pairs.length; i += 2) {
-            result = result.replace(pairs[i], pairs[i + 1] != null ? pairs[i + 1] : "");
-        }
-        return result;
     }
 }

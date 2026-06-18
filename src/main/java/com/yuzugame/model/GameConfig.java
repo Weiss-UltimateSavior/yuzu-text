@@ -32,6 +32,8 @@ public class GameConfig {
     private int mapAiHistoryLimit;
     private int npcAiHistoryLimit;
     private int protagonistAiHistoryLimit;
+    private int puzzleAiHistoryLimit;
+    private int puzzleMaxAttempts;
 
     public String getExploreKeywords() { return exploreKeywords; }
     public void setExploreKeywords(String v) { this.exploreKeywords = v; }
@@ -83,6 +85,10 @@ public class GameConfig {
     public void setNpcAiHistoryLimit(int v) { this.npcAiHistoryLimit = v; }
     public int getProtagonistAiHistoryLimit() { return protagonistAiHistoryLimit; }
     public void setProtagonistAiHistoryLimit(int v) { this.protagonistAiHistoryLimit = v; }
+    public int getPuzzleAiHistoryLimit() { return puzzleAiHistoryLimit; }
+    public void setPuzzleAiHistoryLimit(int v) { this.puzzleAiHistoryLimit = v; }
+    public int getPuzzleMaxAttempts() { return puzzleMaxAttempts; }
+    public void setPuzzleMaxAttempts(int v) { this.puzzleMaxAttempts = v; }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class PuzzleRewards {

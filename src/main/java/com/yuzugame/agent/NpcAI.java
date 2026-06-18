@@ -11,13 +11,12 @@ import java.util.List;
 import java.util.Map;
 
 @Component
-public class NpcAI {
+public class NpcAI extends BaseAgent {
 
-    private final LlmService llm;
     private final GameDataLoader dataLoader;
 
     public NpcAI(LlmService llm, GameDataLoader dataLoader) {
-        this.llm = llm;
+        super(llm);
         this.dataLoader = dataLoader;
     }
 
@@ -27,13 +26,6 @@ public class NpcAI {
 
     private GameConfig gameConfig() {
         return dataLoader.getGameConfig();
-    }
-
-    private String chatWithSession(GameSession session, String systemPrompt, String userMessage, List<Map<String, String>> history) {
-        if (session.hasCustomLlm()) {
-            return llm.chat(systemPrompt, userMessage, history, session.getCustomLlmBaseUrl(), session.getCustomLlmApiKey(), session.getCustomLlmModel());
-        }
-        return llm.chat(systemPrompt, userMessage, history);
     }
 
     public String respond(GameSession session, NpcConfig npc, MapConfig currentMap, String playerMessage) {
@@ -149,11 +141,15 @@ public class NpcAI {
         int giftThreshold = gameConfig().getNpcGiftDialogueThreshold();
         String giftItemIdTemplate = gameConfig().getNpcGiftItemIdTemplate();
         String giftItemId = giftItemIdTemplate != null ? giftItemIdTemplate.replace("{npcId}", nullToEmpty(npc.getId())) : "";
-        boolean playerHasGift = !giftItemId.isEmpty() && session.getPlayer().hasItem(giftItemId);
+
+        // N2 修复：同时检查玩家背包和柚子背包
+        boolean playerHasGift = !giftItemId.isEmpty()
+                && (session.getPlayer().hasItem(giftItemId) || session.yuzuHasItem(giftItemId));
 
         if (playerHasGift) {
             appendSection(sb, prompts().getAlreadyGiftedRule());
         } else if (dialogueCount >= giftThreshold - 1) {
+            // N3 修复：使用通用命名而非硬编码"第三次"
             String giftRule = safeReplace(prompts().getThirdDialogueGiftRule(),
                     "{npcId}", nullToEmpty(npc.getId()),
                     "{itemIdTemplate}", nullToEmpty(giftItemIdTemplate),
@@ -172,24 +168,5 @@ public class NpcAI {
         }
 
         return sb.toString();
-    }
-
-    private static String nullToEmpty(String s) {
-        return s != null ? s : "";
-    }
-
-    private static String safeReplace(String template, String... pairs) {
-        if (template == null) return "";
-        String result = template;
-        for (int i = 0; i + 1 < pairs.length; i += 2) {
-            result = result.replace(pairs[i], pairs[i + 1] != null ? pairs[i + 1] : "");
-        }
-        return result;
-    }
-
-    private static void appendSection(StringBuilder sb, String text) {
-        if (text != null && !text.isBlank()) {
-            sb.append("\n").append(text).append("\n");
-        }
     }
 }

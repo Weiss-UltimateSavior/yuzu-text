@@ -147,7 +147,8 @@ public class GameEngine {
     }
 
     private String doProcessMessage(GameSession session, String playerMessage) {
-
+        // C4 注意：以下配置在方法入口处一次性读取，确保同一回合内配置一致。
+        // 若管理员在回合执行期间触发 /data/reload，后续回合才会使用新配置。
         StoryConfig story = dataLoader.getStory();
         MapConfig currentMap = dataLoader.getMap(session.getCurrentMapId());
         if (currentMap == null) {
@@ -301,22 +302,26 @@ public class GameEngine {
                             outputs.add("【" + npc.getName() + "】" + npcStripped);
                         }
                         session.addChatMessage(new GameSession.ChatMessage("NPC_AI", npc.getId(), npcStripped));
-                        int inventorySizeBefore = session.getPlayer().getInventory().size();
                         stateManager.applyControlTags(session, npcResp, AgentType.NPC);
                         int prevCount = session.getNpcDialogueCount(npc.getId());
                         session.incrementNpcDialogueCount(npc.getId());
 
-                        if (prevCount == gameConfig().getNpcGiftDialogueThreshold() - 1
-                                && session.getPlayer().getInventory().size() == inventorySizeBefore) {
-                            String giftIdTemplate = gameConfig().getNpcGiftItemIdTemplate();
-                            String giftNameTemplate = gameConfig().getNpcGiftNameTemplate();
-                            if (giftIdTemplate != null && giftNameTemplate != null) {
-                                String giftId = giftIdTemplate.replace("{npcId}", npc.getId());
-                                String giftName = giftNameTemplate.replace("{npcName}", npc.getName());
-                                session.getPlayer().addItem(giftId);
-                                session.registerDynamicItemName(giftId, giftName);
-                                outputs.add(outputPrefix("system") + "获得了「" + giftName + "」");
-                                log.info("[NPC:{}] Auto-gave item {} ({}) on {}th dialogue (AI did not give item)", npc.getId(), giftId, giftName, gameConfig().getNpcGiftDialogueThreshold());
+                        // N1 修复：礼物自动发放改为 >= threshold-1 且玩家和柚子均未持有该礼物
+                        // 原逻辑仅在 prevCount == threshold-1 且 inventorySize 未变化时触发，
+                        // 若该轮 AI 未赠物但玩家通过其他方式获得物品，则自动发放被跳过且不再重试。
+                        // 修复后：只要达到对话阈值且礼物尚未被任何人持有，就自动发放。
+                        String giftIdTemplate = gameConfig().getNpcGiftItemIdTemplate();
+                        if (giftIdTemplate != null && prevCount >= gameConfig().getNpcGiftDialogueThreshold() - 1) {
+                            String giftId = giftIdTemplate.replace("{npcId}", npc.getId());
+                            if (!session.getPlayer().hasItem(giftId) && !session.yuzuHasItem(giftId)) {
+                                String giftNameTemplate = gameConfig().getNpcGiftNameTemplate();
+                                if (giftNameTemplate != null) {
+                                    String giftName = giftNameTemplate.replace("{npcName}", npc.getName());
+                                    session.getPlayer().addItem(giftId);
+                                    session.registerDynamicItemName(giftId, giftName);
+                                    outputs.add(outputPrefix("system") + "获得了「" + giftName + "」");
+                                    log.info("[NPC:{}] Auto-gave item {} ({}) on dialogue count {} (threshold {})", npc.getId(), giftId, giftName, prevCount + 1, gameConfig().getNpcGiftDialogueThreshold());
+                                }
                             }
                         }
 
@@ -333,7 +338,7 @@ public class GameEngine {
         if (session.getActivePuzzleId() != null) {
             PuzzleConfig puzzle = dataLoader.getPuzzle(session.getActivePuzzleId());
             if (puzzle != null) {
-                String puzzleResp = puzzleAI.handle(session, puzzle, currentMap, playerMessage);
+                String puzzleResp = puzzleAI.handle(session, puzzle, playerMessage);
                 String puzzleStripped = stateManager.stripInternal(puzzleResp);
                 if (!puzzleStripped.isBlank()) {
                     outputs.add(outputPrefix("puzzle") + puzzleStripped);
