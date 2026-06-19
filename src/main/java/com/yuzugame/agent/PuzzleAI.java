@@ -30,9 +30,13 @@ public class PuzzleAI extends BaseAgent {
     public String handle(GameSession session, PuzzleConfig puzzle, String playerMessage) {
         if (session == null || puzzle == null) return "";
 
-        // Z3 修复：达到最大尝试次数时硬性阻止，不依赖 AI 输出标签
+        // 每次调用 LLM 前先递增尝试次数，确保 Z3 硬限制能正确生效。
+        // 之前的逻辑依赖 LLM 输出 PUZZLE:FAIL 标签来递增 attempts，
+        // 如果 LLM 不输出标签，attempts 永远不递增，Z3 硬限制形同虚设。
+        int attempts = session.incrementPuzzleAttempts(puzzle.getId());
         int maxAttempts = puzzle.getMaxAttempts() > 0 ? puzzle.getMaxAttempts() : gameConfig().getPuzzleMaxAttempts();
-        int attempts = session.getPuzzleAttempts(puzzle.getId());
+
+        // Z3 硬限制：达到最大尝试次数时强制 FAIL，不依赖 AI 输出标签
         if (attempts >= maxAttempts) {
             // 使用 <ctrl> 块包裹标签，确保 stripInternal 正确剥离、
             // applyControlTags 正确解析，且 \S+ 不会误匹配方括号

@@ -476,16 +476,19 @@ public class GameStateManager {
                 yield null;
             }
             case "SOLVE" -> {
-                session.incrementPuzzleAttempts(param);
+                // attempts 已在 PuzzleAI.handle() 中递增，此处不再重复递增
                 session.markPuzzleSolved(param);
                 session.setActivePuzzleId(null);
                 log.debug("Puzzle solved: {} (attempts: {})", param, session.getPuzzleAttempts(param));
                 yield null;
             }
             case "FAIL" -> {
-                int attempts = session.incrementPuzzleAttempts(param);
+                // attempts 已在 PuzzleAI.handle() 中递增，此处不再重复递增
+                int attempts = session.getPuzzleAttempts(param);
                 PuzzleConfig puzzleCfg = dataLoader.getPuzzle(param);
-                int maxAttempts = puzzleCfg != null ? puzzleCfg.getMaxAttempts() : 5;
+                int maxAttempts = puzzleCfg != null && puzzleCfg.getMaxAttempts() > 0
+                        ? puzzleCfg.getMaxAttempts()
+                        : gameConfig().getPuzzleMaxAttempts();
                 if (attempts >= maxAttempts) {
                     session.markPuzzleFailed(param);
                     session.setActivePuzzleId(null);
