@@ -176,7 +176,8 @@ public class PuzzleAI extends BaseAgent {
         }
 
         // 计算最少有效交互轮次（难度 × 2，确保谜题不会太快被跳过）
-        int minRounds = puzzle.getDifficulty() * 2;
+        // 但必须保证 minRounds < maxAttempts，否则谜题不可能被解决
+        int minRounds = Math.min(puzzle.getDifficulty() * 2, Math.max(1, maxAttempts - 2));
         int currentRounds = session.getPuzzleAttempts(puzzle.getId());
         int failSanityPenalty = puzzle.getFailSanityPenalty();
 
@@ -190,6 +191,13 @@ public class PuzzleAI extends BaseAgent {
                 "{currentRounds}", String.valueOf(currentRounds),
                 "{maxAttempts}", String.valueOf(maxAttempts),
                 "{failSanityPenalty}", String.valueOf(failSanityPenalty));
+
+        // 动态追加：当前是否已满足最低交互轮次，引导 LLM 正确输出 SOLVE 标签
+        if (currentRounds >= minRounds) {
+            solvingRules += "\n9. ★ 当前已满足最低交互轮次要求（" + currentRounds + ">=" + minRounds + "），如果玩家的操作符合成功条件，你可以使用 PUZZLE:SOLVE:" + puzzle.getId() + " 判定成功。";
+        } else {
+            solvingRules += "\n9. ★ 当前尚未满足最低交互轮次要求（" + currentRounds + "<" + minRounds + "），即使玩家操作正确也不能使用 PUZZLE:SOLVE，需要继续引导交互。";
+        }
 
         String availableTags = safeReplace(prompts().getAvailableTagsTemplate(),
                 "{puzzleId}", nullToEmpty(puzzle.getId()));
