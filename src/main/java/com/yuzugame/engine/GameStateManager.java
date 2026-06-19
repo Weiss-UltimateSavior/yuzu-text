@@ -483,19 +483,9 @@ public class GameStateManager {
                 yield null;
             }
             case "FAIL" -> {
-                // attempts 已在 PuzzleAI.handle() 中递增，此处不再重复递增
-                int attempts = session.getPuzzleAttempts(param);
-                PuzzleConfig puzzleCfg = dataLoader.getPuzzle(param);
-                int maxAttempts = puzzleCfg != null && puzzleCfg.getMaxAttempts() > 0
-                        ? puzzleCfg.getMaxAttempts()
-                        : gameConfig().getPuzzleMaxAttempts();
-                if (attempts >= maxAttempts) {
-                    session.markPuzzleFailed(param);
-                    session.setActivePuzzleId(null);
-                    log.debug("Puzzle failed at attempt {}/{}: {} — max attempts reached", attempts, maxAttempts, param);
-                } else {
-                    log.debug("Puzzle attempt {}/{} failed: {} — puzzle remains active", attempts, maxAttempts, param);
-                }
+                // 谜题不再有最大尝试次数限制，FAIL 仅表示本次尝试失败
+                // 谜题保持活跃，玩家可以继续尝试直到成功
+                log.debug("Puzzle attempt failed: {} — puzzle remains active, player can retry", param);
                 yield null;
             }
             default -> null;

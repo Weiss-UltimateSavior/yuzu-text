@@ -30,18 +30,9 @@ public class PuzzleAI extends BaseAgent {
     public String handle(GameSession session, PuzzleConfig puzzle, String playerMessage) {
         if (session == null || puzzle == null) return "";
 
-        // 每次调用 LLM 前先递增尝试次数，确保 Z3 硬限制能正确生效。
-        // 之前的逻辑依赖 LLM 输出 PUZZLE:FAIL 标签来递增 attempts，
-        // 如果 LLM 不输出标签，attempts 永远不递增，Z3 硬限制形同虚设。
-        int attempts = session.incrementPuzzleAttempts(puzzle.getId());
-        int maxAttempts = puzzle.getMaxAttempts() > 0 ? puzzle.getMaxAttempts() : gameConfig().getPuzzleMaxAttempts();
-
-        // Z3 硬限制：达到最大尝试次数时强制 FAIL，不依赖 AI 输出标签
-        if (attempts >= maxAttempts) {
-            // 使用 <ctrl> 块包裹标签，确保 stripInternal 正确剥离、
-            // applyControlTags 正确解析，且 \S+ 不会误匹配方括号
-            return "<ctrl>PUZZLE:FAIL:" + puzzle.getId() + "</ctrl> 谜题尝试次数已达上限。";
-        }
+        // 递增尝试次数，仅用于追踪交互进度（供 prompt 中显示当前轮次）
+        // 不再有最大尝试次数限制，玩家可以一直尝试直到成功
+        session.incrementPuzzleAttempts(puzzle.getId());
 
         String prompt = buildPrompt(session, puzzle);
 
@@ -143,15 +134,13 @@ public class PuzzleAI extends BaseAgent {
         StringBuilder sb = new StringBuilder();
         appendNonNull(sb, puzzle.getSystemPrompt());
 
-        int maxAttempts = puzzle.getMaxAttempts() > 0 ? puzzle.getMaxAttempts() : gameConfig().getPuzzleMaxAttempts();
-
         // 替换 stateHeader 模板中的占位符
         String stateHeader = safeReplace(prompts().getStateHeader(),
                 "{puzzleName}", nullToEmpty(puzzle.getName()),
                 "{difficulty}", String.valueOf(puzzle.getDifficulty()),
                 "{description}", nullToEmpty(puzzle.getDescription()),
                 "{solutionCriteria}", nullToEmpty(puzzle.getSolutionCriteria()),
-                "{maxAttempts}", String.valueOf(maxAttempts),
+                "{maxAttempts}", "无限",
                 "{attempts}", String.valueOf(session.getPuzzleAttempts(puzzle.getId())),
                 "{failSanityPenalty}", String.valueOf(puzzle.getFailSanityPenalty()),
                 "{failNarrative}", nullToEmpty(puzzle.getFailNarrative()));
@@ -161,7 +150,7 @@ public class PuzzleAI extends BaseAgent {
         sb.append("\n=== 当前状态 ===\n");
         sb.append("回合: ").append(session.getTurn()).append("\n");
         sb.append("已尝试次数: ").append(session.getPuzzleAttempts(puzzle.getId())).append("\n");
-        sb.append("最大尝试次数: ").append(maxAttempts).append("\n");
+        sb.append("尝试次数限制: 无限（玩家可以一直尝试直到成功）\n");
 
         // 前置物品
         String requiredItemId = puzzle.getRequiredItemId();
@@ -176,8 +165,7 @@ public class PuzzleAI extends BaseAgent {
         }
 
         // 计算最少有效交互轮次（难度 × 2，确保谜题不会太快被跳过）
-        // 但必须保证 minRounds < maxAttempts，否则谜题不可能被解决
-        int minRounds = Math.min(puzzle.getDifficulty() * 2, Math.max(1, maxAttempts - 2));
+        int minRounds = puzzle.getDifficulty() * 2;
         int currentRounds = session.getPuzzleAttempts(puzzle.getId());
         int failSanityPenalty = puzzle.getFailSanityPenalty();
 
@@ -189,7 +177,7 @@ public class PuzzleAI extends BaseAgent {
                 "{minRounds}", String.valueOf(minRounds),
                 "{difficulty}", String.valueOf(puzzle.getDifficulty()),
                 "{currentRounds}", String.valueOf(currentRounds),
-                "{maxAttempts}", String.valueOf(maxAttempts),
+                "{maxAttempts}", "无限",
                 "{failSanityPenalty}", String.valueOf(failSanityPenalty));
 
         // 动态追加：当前是否已满足最低交互轮次，引导 LLM 正确输出 SOLVE 标签

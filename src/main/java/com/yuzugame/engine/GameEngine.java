@@ -562,7 +562,8 @@ public class GameEngine {
     /**
      * 判断是否应检查地图切换。
      *
-     * <p>条件：当前地图有下一地图 && 当前地图的谜题已解决或已失败。</p>
+     * <p>条件：当前地图有下一地图 && 当前地图的谜题已解决。</p>
+     * <p>谜题不再有永久失败机制，玩家可以一直尝试直到成功。</p>
      */
     private boolean shouldCheckMapTransition(GameSession session, MapConfig currentMap) {
         if (currentMap.getNextMapId() == null || currentMap.getNextMapId().isBlank()) {
@@ -570,17 +571,11 @@ public class GameEngine {
         }
         String unlockCondition = currentMap.getUnlockCondition();
         if (unlockCondition != null && !unlockCondition.isBlank()) {
-            if (evaluator.evaluateOr(session, unlockCondition)) {
-                return true;
-            }
-            String failCondition = unlockCondition.replace(":success", ":failed");
-            return evaluator.evaluateOr(session, failCondition);
+            return evaluator.evaluateOr(session, unlockCondition);
         }
         boolean anyPuzzleSolved = currentMap.getPuzzles() != null &&
                 currentMap.getPuzzles().stream().anyMatch(session::isPuzzleSolved);
-        boolean anyPuzzleFailed = currentMap.getPuzzles() != null &&
-                currentMap.getPuzzles().stream().anyMatch(p -> session.getFailedPuzzles().contains(p));
-        return anyPuzzleSolved || anyPuzzleFailed;
+        return anyPuzzleSolved;
     }
 
     /**
