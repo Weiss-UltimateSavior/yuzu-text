@@ -631,6 +631,10 @@ public class GameEngine {
             if (!session.isItemFound(itemId) && !session.getPlayer().hasItem(itemId)) {
                 session.foundItem(itemId);
                 session.getPlayer().addItem(itemId);
+                // 为不在预设配置中的物品注册兜底名称
+                if (dataLoader.getItem(itemId) == null && session.getDynamicItemName(itemId) == null) {
+                    session.registerDynamicItemName(itemId, itemId);
+                }
                 picked++;
                 log.debug("Auto-picked up item: {}", itemId);
             }

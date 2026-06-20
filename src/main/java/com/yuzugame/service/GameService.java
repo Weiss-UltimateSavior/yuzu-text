@@ -414,26 +414,36 @@ public class GameService {
             dynamicItemMap.put(id, detail);
         });
 
+        // 构建物品名称映射：Agent 注册的名称优先，预设配置兜底
+        Map<String, String> itemNames = new LinkedHashMap<>();
+        for (Map.Entry<String, ItemConfig> e : dataLoader.getAllItems().entrySet()) {
+            itemNames.put(e.getKey(), e.getValue().getName());
+        }
+        // Agent 注册的名称覆盖预设名称（Agent 命名优先）
+        session.getDynamicItemNames().forEach(itemNames::put);
+        state.put("itemNames", itemNames);
+
         List<Map<String, String>> backpack = new ArrayList<>();
         List<Map<String, String>> clues = new ArrayList<>();
         for (String itemId : p.getInventory()) {
             Map<String, String> entry = new LinkedHashMap<>();
+            // Agent 注册的名称优先于预设配置
+            String agentName = session.getDynamicItemName(itemId);
             if (presetItemMap.containsKey(itemId)) {
                 entry.put("id", itemId);
-                entry.put("name", presetItemMap.get(itemId).get("name"));
+                entry.put("name", agentName != null ? agentName : presetItemMap.get(itemId).get("name"));
                 entry.put("type", presetItemMap.get(itemId).get("type"));
                 entry.put("description", presetItemMap.get(itemId).get("description"));
                 backpack.add(entry);
             } else if (dynamicItemMap.containsKey(itemId)) {
                 entry.put("id", itemId);
-                entry.put("name", dynamicItemMap.get(itemId).get("name"));
+                entry.put("name", agentName != null ? agentName : dynamicItemMap.get(itemId).get("name"));
                 entry.put("type", dynamicItemMap.get(itemId).get("type"));
                 entry.put("description", dynamicItemMap.get(itemId).get("description"));
                 clues.add(entry);
             } else {
-                String fallbackName = session.getDynamicItemName(itemId);
                 entry.put("id", itemId);
-                entry.put("name", fallbackName != null ? fallbackName : itemId);
+                entry.put("name", agentName != null ? agentName : itemId);
                 entry.put("type", "DYNAMIC");
                 entry.put("description", "");
                 clues.add(entry);

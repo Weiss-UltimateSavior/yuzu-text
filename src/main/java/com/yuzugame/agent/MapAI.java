@@ -156,7 +156,7 @@ public class MapAI extends BaseAgent {
             if (session.isPuzzleSolved(pId)) {
                 sb.append("谜题 ").append(pId).append(": 已解决。出口:").append(nullToEmpty(currentMap.getExitHint())).append("\n");
             } else if (session.getFailedPuzzles().contains(pId)) {
-                sb.append("谜题 ").append(pId).append(": 已失败（以代价通过）。\n");
+                sb.append("谜题 ").append(pId).append(": 已失败。\n");
             } else if (session.getActivePuzzleId() != null && session.getActivePuzzleId().equals(pId)) {
                 sb.append("谜题 ").append(pId).append(": 已激活，玩家正在解谜。\n");
             } else {

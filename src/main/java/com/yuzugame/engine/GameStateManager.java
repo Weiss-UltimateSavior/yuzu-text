@@ -302,11 +302,12 @@ public class GameStateManager {
      *
      * <ul>
      *   <li>GIVE — NPC/柚子将物品交给玩家。格式：{@code ITEM:GIVE:物品ID:中文名称}
-     *       （中文名称可选，缺失时用物品ID兜底并打印warn日志）</li>
+     *       （中文名称必填，缺失时用物品ID兜底并打印warn日志）</li>
      *   <li>FOUND — 场景中出现可拾取物品。格式：{@code ITEM:FOUND:物品ID:中文名称}
-     *       （中文名称可选，缺失时用物品ID兜底）</li>
+     *       （中文名称必填，缺失时用物品ID兜底并打印warn日志）</li>
      *   <li>TAKE — 从玩家背包中移除物品。格式：{@code ITEM:TAKE:物品ID}</li>
-     *   <li>CREATE — 柚子制造物品。格式：{@code ITEM:CREATE:物品ID}</li>
+     *   <li>CREATE — 柚子制造物品。格式：{@code ITEM:CREATE:物品ID:中文名称}
+     *       （中文名称必填，缺失时不注册名称）</li>
      *   <li>USE — 柚子消耗物品。格式：{@code ITEM:USE:物品ID}</li>
      * </ul>
      *
@@ -342,9 +343,8 @@ public class GameStateManager {
                     }
                 }
                 session.getPlayer().addItem(itemId);
-                if (dataLoader.getItem(itemId) == null) {
-                    session.registerDynamicItemName(itemId, itemName);
-                }
+                // 始终注册 Agent 指定的中文名称，覆盖预设配置中的名称
+                session.registerDynamicItemName(itemId, itemName);
                 log.debug("Item given to player: {} ({}) by {}", itemId, itemName, agent);
                 yield null;
             }
@@ -362,9 +362,8 @@ public class GameStateManager {
                 }
                 session.foundItem(itemId);
                 session.getPlayer().addItem(itemId);
-                if (dataLoader.getItem(itemId) == null) {
-                    session.registerDynamicItemName(itemId, itemName);
-                }
+                // 始终注册 Agent 指定的中文名称，覆盖预设配置中的名称
+                session.registerDynamicItemName(itemId, itemName);
                 log.debug("Item found and picked up: {} ({})", itemId, itemName);
                 yield null;
             }
@@ -374,8 +373,22 @@ public class GameStateManager {
                 yield null;
             }
             case "CREATE" -> {
-                session.addYuzuItem(param);
-                log.debug("Item created by Yuzu: {}", param);
+                String[] createParts = param.split(":", 2);
+                String itemId = createParts[0];
+                String itemName = createParts.length > 1 ? createParts[1] : null;
+                if (itemId.isBlank()) {
+                    log.warn("ITEM:CREATE tag missing itemId");
+                    yield null;
+                }
+                if (itemName == null || itemName.isBlank()) {
+                    log.warn("ITEM:CREATE tag missing Chinese name: ITEM:CREATE:{} — expected format ITEM:CREATE:id:中文名称", itemId);
+                }
+                session.addYuzuItem(itemId);
+                // 始终注册 Agent 指定的中文名称，覆盖预设配置中的名称
+                if (itemName != null && !itemName.isBlank()) {
+                    session.registerDynamicItemName(itemId, itemName);
+                }
+                log.debug("Item created by Yuzu: {} ({})", itemId, itemName != null ? itemName : "unnamed");
                 yield null;
             }
             case "USE" -> {
