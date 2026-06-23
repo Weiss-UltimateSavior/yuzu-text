@@ -277,55 +277,60 @@ public class GameEngine {
             NpcConfig npc = findNpcByName(npcName);
 
             if (npc == null) {
-                outputs.add(outputPrefix("hint") + "迷雾尚未揭露。");
+                String tpl = gameConfig().getOutputPrefixes().getOrDefault("npcNotFound", "【提示】迷雾尚未揭露。");
+                outputs.add(tpl);
             } else {
-                if (!session.isNpcUnlocked(npc.getId())) {
-                    if (evaluator.evaluateOr(session, npc.getAppearCondition())) {
-                        session.unlockNpc(npc.getId());
-                        session.getPlayer().addSanity(gameConfig().getNpcUnlockSanityReward());
-                        log.debug("Auto-unlocked NPC {} (appearCondition met), sanity +{} -> now {}", npc.getId(), gameConfig().getNpcUnlockSanityReward(), session.getPlayer().getSanity());
-                    } else {
-                        outputs.add(outputPrefix("hint") + npc.getDialogueHint());
-                    }
-                }
-                if (session.isNpcUnlocked(npc.getId())) {
-                    if (session.isNpcKilled(npc.getId()) && !session.isNpcRevived(npc.getId())) {
-                        outputs.add(outputPrefix("hint") + npc.getName() + "已经不在了。");
-                    } else if (npc.getDialogueCondition() != null && !npc.getDialogueCondition().isBlank()
-                            && !evaluator.evaluateOr(session, npc.getDialogueCondition())) {
-                        outputs.add(outputPrefix("hint") + npc.getName() + "此刻不愿与你交谈。");
-                    } else {
-                        String npcResp = npcAI.respond(session, npc, currentMap, npcMsg);
-                        String npcStripped = stateManager.stripInternal(npcResp);
-                        if (!npcStripped.isBlank()) {
-                            outputs.add("【" + npc.getName() + "】" + npcStripped);
-                        }
-                        session.addChatMessage(new GameSession.ChatMessage("NPC_AI", npc.getId(), npcStripped));
-                        stateManager.applyControlTags(session, npcResp, AgentType.NPC);
-                        int prevCount = session.getNpcDialogueCount(npc.getId());
-                        session.incrementNpcDialogueCount(npc.getId());
+                // 检查NPC是否属于当前地图
+                List<String> mapNpcIds = currentMap.getNpcIds();
+                boolean npcInCurrentMap = mapNpcIds != null && mapNpcIds.contains(npc.getId());
 
-                        // N1 修复：礼物自动发放改为 >= threshold-1 且玩家和柚子均未持有该礼物
-                        // 原逻辑仅在 prevCount == threshold-1 且 inventorySize 未变化时触发，
-                        // 若该轮 AI 未赠物但玩家通过其他方式获得物品，则自动发放被跳过且不再重试。
-                        // 修复后：只要达到对话阈值且礼物尚未被任何人持有，就自动发放。
-                        String giftIdTemplate = gameConfig().getNpcGiftItemIdTemplate();
-                        if (giftIdTemplate != null && prevCount >= gameConfig().getNpcGiftDialogueThreshold() - 1) {
-                            String giftId = giftIdTemplate.replace("{npcId}", npc.getId());
-                            if (!session.getPlayer().hasItem(giftId) && !session.yuzuHasItem(giftId)) {
-                                String giftNameTemplate = gameConfig().getNpcGiftNameTemplate();
-                                if (giftNameTemplate != null) {
-                                    String giftName = giftNameTemplate.replace("{npcName}", npc.getName());
-                                    session.getPlayer().addItem(giftId);
-                                    session.registerDynamicItemName(giftId, giftName);
-                                    outputs.add(outputPrefix("system") + "获得了「" + giftName + "」");
-                                    log.info("[NPC:{}] Auto-gave item {} ({}) on dialogue count {} (threshold {})", npc.getId(), giftId, giftName, prevCount + 1, gameConfig().getNpcGiftDialogueThreshold());
+                if (!npcInCurrentMap) {
+                    String tpl = gameConfig().getOutputPrefixes().getOrDefault("npcNotHere", "【提示】{npcName}不在这里，你需要在更深层的地方寻找。");
+                    outputs.add(tpl.replace("{npcName}", npc.getName()));
+                } else {
+                    if (!session.isNpcUnlocked(npc.getId())) {
+                        if (evaluator.evaluateOr(session, npc.getAppearCondition())) {
+                            stateManager.applyControlTags(session, "NPC:UNLOCK:" + npc.getId(), AgentType.MAP);
+                            log.debug("Auto-unlocked NPC {} (appearCondition met)", npc.getId());
+                        } else {
+                            outputs.add(outputPrefix("hint") + npc.getDialogueHint());
+                        }
+                    }
+                    if (session.isNpcUnlocked(npc.getId())) {
+                        if (npc.getDialogueCondition() != null && !npc.getDialogueCondition().isBlank()
+                                && !evaluator.evaluateOr(session, npc.getDialogueCondition())) {
+                            String tpl = gameConfig().getOutputPrefixes().getOrDefault("npcRefuseTalk", "【提示】{npcName}此刻不愿与你交谈。");
+                            outputs.add(tpl.replace("{npcName}", npc.getName()));
+                        } else {
+                            String npcResp = npcAI.respond(session, npc, currentMap, npcMsg);
+                            String npcStripped = stateManager.stripInternal(npcResp);
+                            if (!npcStripped.isBlank()) {
+                                outputs.add("【" + npc.getName() + "】" + npcStripped);
+                            }
+                            session.addChatMessage(new GameSession.ChatMessage("NPC_AI", npc.getId(), npcStripped));
+                            stateManager.applyControlTags(session, npcResp, AgentType.NPC);
+                            int prevCount = session.getNpcDialogueCount(npc.getId());
+                            session.incrementNpcDialogueCount(npc.getId());
+
+                            // N1 修复：礼物自动发放改为 >= threshold-1 且玩家和柚子均未持有该礼物
+                            String giftIdTemplate = gameConfig().getNpcGiftItemIdTemplate();
+                            if (giftIdTemplate != null && prevCount >= gameConfig().getNpcGiftDialogueThreshold() - 1) {
+                                String giftId = giftIdTemplate.replace("{npcId}", npc.getId());
+                                if (!session.getPlayer().hasItem(giftId) && !session.yuzuHasItem(giftId)) {
+                                    String giftNameTemplate = gameConfig().getNpcGiftNameTemplate();
+                                    if (giftNameTemplate != null) {
+                                        String giftName = giftNameTemplate.replace("{npcName}", npc.getName());
+                                        session.getPlayer().addItem(giftId);
+                                        session.registerDynamicItemName(giftId, giftName);
+                                        outputs.add(outputPrefix("system") + "获得了「" + giftName + "」");
+                                        log.info("[NPC:{}] Auto-gave item {} ({}) on dialogue count {} (threshold {})", npc.getId(), giftId, giftName, prevCount + 1, gameConfig().getNpcGiftDialogueThreshold());
+                                    }
                                 }
                             }
-                        }
 
-                        session.getPlayer().addRevelation(gameConfig().getNpcDialogueRevelationBonus());
-                        log.debug("NPC dialogue revelation: +1 -> now {}", session.getPlayer().getRevelation());
+                            session.getPlayer().addRevelation(gameConfig().getNpcDialogueRevelationBonus());
+                            log.debug("NPC dialogue revelation: +1 -> now {}", session.getPlayer().getRevelation());
+                        }
                     }
                 }
             }
@@ -705,11 +710,9 @@ public class GameEngine {
         dst.setSolvedPuzzles(new HashSet<>(src.getSolvedPuzzles()));
         dst.setFailedPuzzles(new HashSet<>(src.getFailedPuzzles()));
         dst.setUnlockedNpcs(new HashSet<>(src.getUnlockedNpcs()));
-        dst.setKilledNpcs(new HashSet<>(src.getKilledNpcs()));
         dst.setFoundItems(new HashSet<>(src.getFoundItems()));
         dst.setTriggeredSanityWarnings(new HashSet<>(src.getTriggeredSanityWarnings()));
         dst.setYuzuInventory(new ArrayList<>(src.getYuzuInventory()));
-        dst.setRevivedNpcs(new HashSet<>(src.getRevivedNpcs()));
 
         dst.setPuzzleAttempts(new HashMap<>(src.getPuzzleAttempts()));
         dst.setNpcDialogueCounts(new HashMap<>(src.getNpcDialogueCounts()));

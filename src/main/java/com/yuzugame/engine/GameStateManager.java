@@ -55,7 +55,7 @@ public class GameStateManager {
      * <p>匹配格式如：{@code PUZZLE:SOLVE:id}、{@code SANITY:-3}、{@code MAP:id} 等。
      * 仅在 {@code <ctrl>} 块提取结果为空时启用，避免重复提取。</p>
      */
-    private static final Pattern BARE_TAG = Pattern.compile("(PUZZLE:(?:SOLVE|FAIL|ACTIVATE):\\S+|SANITY:[+-]?\\d+|REVELATION:[+-]?\\d+|AFFECTION:[+-]?\\d+|MAP:\\S+|CHAPTER:\\S+|ITEM:(?:GIVE|TAKE|CREATE|USE):\\S+|ITEM:FOUND:\\S+|NPC:(?:UNLOCK|KILL|REVIVE):\\S+|NPC_AFFECTION:\\S+:[+-]?\\d+|ENDING:\\S+|AREA:\\S+)");
+    private static final Pattern BARE_TAG = Pattern.compile("(PUZZLE:(?:SOLVE|FAIL|ACTIVATE):\\S+|SANITY:[+-]?\\d+|REVELATION:[+-]?\\d+|AFFECTION:[+-]?\\d+|MAP:\\S+|CHAPTER:\\S+|ITEM:(?:GIVE|TAKE|CREATE|USE):\\S+|ITEM:FOUND:\\S+|NPC:UNLOCK:\\S+|NPC_AFFECTION:\\S+:[+-]?\\d+|ENDING:\\S+|AREA:\\S+)");
 
     /**
      * Agent 类型枚举 —— 用于控制标签的权限校验。
@@ -146,7 +146,7 @@ public class GameStateManager {
      *   <li>PROTAGONIST（柚子）：SANITY/REVELATION/AFFECTION + ITEM:GIVE/CREATE/USE</li>
      *   <li>MAP（地图AI）：SANITY/REVELATION/AFFECTION + ITEM:FOUND + NPC:UNLOCK + PUZZLE:ACTIVATE</li>
      *   <li>NPC：SANITY/REVELATION/AFFECTION + ITEM:GIVE（第3次对话给道具）</li>
-     *   <li>DIRECTOR（导演）：SANITY/REVELATION/AFFECTION/NPC_AFFECTION + ITEM:GIVE/CREATE/USE/TAKE + NPC:KILL/REVIVE + PUZZLE:ACTIVATE + ENDING/EVENT（地图/章节切换由引擎处理，不由标签触发）</li>
+     *   <li>DIRECTOR（导演）：SANITY/REVELATION/AFFECTION/NPC_AFFECTION + ITEM:GIVE/CREATE/USE/TAKE + NPC:UNLOCK + PUZZLE:ACTIVATE/SOLVE + ENDING/EVENT（地图/章节切换由引擎处理，不由标签触发）</li>
      *   <li>PUZZLE：SANITY/REVELATION/AFFECTION + ITEM:TAKE + PUZZLE:SOLVE/FAIL + NPC:UNLOCK</li>
      * </ul></p>
      */
@@ -178,10 +178,7 @@ public class GameStateManager {
                     case "GIVE", "CREATE", "USE", "TAKE" -> true;
                     default -> false;
                 };
-                case "NPC" -> switch (action) {
-                    case "KILL", "REVIVE" -> true;
-                    default -> false;
-                };
+                case "NPC" -> "UNLOCK".equals(action);
                 case "PUZZLE" -> "ACTIVATE".equals(action) || "SOLVE".equals(action);
                 case "MAP", "CHAPTER" -> false;
                 case "ENDING", "EVENT" -> true;
@@ -422,44 +419,27 @@ public class GameStateManager {
     }
 
     /**
-     * 处理 NPC:ACTION:ID 标签 —— NPC状态变更。
-     *
-     * <ul>
-     *   <li>UNLOCK — 解锁NPC对话</li>
-     *   <li>KILL — NPC死亡</li>
-     *   <li>REVIVE — NPC复活</li>
-     * </ul>
+     * 处理 NPC:UNLOCK:ID 标签 —— NPC解锁。
      */
     private String handleNpc(GameSession session, String action, String param) {
         if (param == null || param.isBlank()) {
             log.warn("NPC:{} tag missing npcId", action);
             return null;
         }
-        return switch (action) {
-            case "UNLOCK" -> {
-                boolean firstUnlock = !session.isNpcUnlocked(param);
-                session.unlockNpc(param);
-                if (firstUnlock) {
-                    int reward = gameConfig().getNpcUnlockSanityReward();
-                    session.getPlayer().addSanity(reward);
-                    log.debug("NPC unlocked (first time): {}, sanity +{} -> now {}", param, reward, session.getPlayer().getSanity());
-                } else {
-                    log.debug("NPC unlocked (already): {}", param);
-                }
-                yield null;
-            }
-            case "KILL" -> {
-                session.killNpc(param);
-                log.debug("NPC killed: {}", param);
-                yield null;
-            }
-            case "REVIVE" -> {
-                session.reviveNpc(param);
-                log.debug("NPC revived: {}", param);
-                yield null;
-            }
-            default -> null;
-        };
+        if (!"UNLOCK".equals(action)) {
+            log.warn("NPC:{} action not supported (only UNLOCK)", action);
+            return null;
+        }
+        boolean firstUnlock = !session.isNpcUnlocked(param);
+        session.unlockNpc(param);
+        if (firstUnlock) {
+            int reward = gameConfig().getNpcUnlockSanityReward();
+            session.getPlayer().addSanity(reward);
+            log.debug("NPC unlocked (first time): {}, sanity +{} -> now {}", param, reward, session.getPlayer().getSanity());
+        } else {
+            log.debug("NPC unlocked (already): {}", param);
+        }
+        return null;
     }
 
     /**

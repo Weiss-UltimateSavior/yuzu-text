@@ -13,7 +13,7 @@ import java.util.*;
  *   <li>玩家数据（{@link Player}）</li>
  *   <li>地图与章节进度（currentMapId、currentChapter）</li>
  *   <li>谜题状态（已解决/已失败/活跃/尝试次数）</li>
- *   <li>NPC 状态（已解锁/已击杀/好感度/已复活）</li>
+ *   <li>NPC 状态（已解锁/好感度）</li>
  *   <li>物品状态（已发现物品）</li>
  *   <li>柚子背包（独立于玩家背包的物品存储）</li>
  *   <li>对话历史（{@link ChatMessage}）</li>
@@ -49,12 +49,10 @@ public class GameSession {
     private Set<String> solvedPuzzles = new HashSet<>();
     private Set<String> failedPuzzles = new HashSet<>();
     private Set<String> unlockedNpcs = new HashSet<>();
-    private Set<String> killedNpcs = new HashSet<>();
     private Set<String> foundItems = new HashSet<>();
     private Set<Integer> triggeredSanityWarnings = new HashSet<>();
 
     private List<String> yuzuInventory = new ArrayList<>();
-    private Set<String> revivedNpcs = new HashSet<>();
 
     private Map<String, Integer> puzzleAttempts = new HashMap<>();
     private Map<String, Integer> npcDialogueCounts = new HashMap<>();
@@ -133,11 +131,6 @@ public class GameSession {
     public boolean isNpcUnlocked(String npcId) { return unlockedNpcs.contains(npcId); }
     public void unlockNpc(String npcId) { unlockedNpcs.add(npcId); }
 
-    public Set<String> getKilledNpcs() { return Collections.unmodifiableSet(killedNpcs); }
-    public void setKilledNpcs(Set<String> killedNpcs) { this.killedNpcs = new HashSet<>(killedNpcs); }
-    public boolean isNpcKilled(String npcId) { return killedNpcs.contains(npcId); }
-    public void killNpc(String npcId) { killedNpcs.add(npcId); }
-
     public Set<String> getFoundItems() { return Collections.unmodifiableSet(foundItems); }
     public void setFoundItems(Set<String> foundItems) { this.foundItems = new HashSet<>(foundItems); }
     public boolean isItemFound(String itemId) { return foundItems.contains(itemId); }
@@ -175,10 +168,10 @@ public class GameSession {
     public void setEndingType(String endingType) { this.endingType = endingType; }
 
     /**
-     * 计算当前存活的 NPC 数量（已解锁但未被击杀）。
+     * 计算当前已解锁的 NPC 数量。
      */
     public int getAliveNpcCount() {
-        return (int) unlockedNpcs.stream().filter(id -> !killedNpcs.contains(id)).count();
+        return unlockedNpcs.size();
     }
 
     /**
@@ -199,11 +192,6 @@ public class GameSession {
     public boolean yuzuHasItem(String itemId) { return yuzuInventory.contains(itemId); }
     public void addYuzuItem(String itemId) { if (!yuzuInventory.contains(itemId)) yuzuInventory.add(itemId); }
     public void removeYuzuItem(String itemId) { yuzuInventory.remove(itemId); }
-
-    public boolean isNpcRevived(String npcId) { return revivedNpcs.contains(npcId); }
-    public void reviveNpc(String npcId) { revivedNpcs.add(npcId); killedNpcs.remove(npcId); }
-    public Set<String> getRevivedNpcs() { return Collections.unmodifiableSet(revivedNpcs); }
-    public void setRevivedNpcs(Set<String> revivedNpcs) { this.revivedNpcs = new HashSet<>(revivedNpcs); }
 
     public Map<String, Integer> getUsedRedemptionCodes() { return Collections.unmodifiableMap(usedRedemptionCodes); }
     public void setUsedRedemptionCodes(Map<String, Integer> usedRedemptionCodes) { this.usedRedemptionCodes = new HashMap<>(usedRedemptionCodes); }

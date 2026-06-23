@@ -164,7 +164,6 @@ public class MapAI extends BaseAgent {
             }
         }
 
-        // M3 修复：移除冗余的 removeAll(killedNpcs)，被杀NPC必然已解锁，已被上一行移除
         List<String> stillLocked = new ArrayList<>(mapNpcIds);
         stillLocked.removeAll(session.getUnlockedNpcs());
 

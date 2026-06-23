@@ -46,6 +46,9 @@ public class ConditionEvaluator {
         if ("failed".equals(status)) {
             return session.getFailedPuzzles().contains(puzzleId);
         }
+        if ("active".equals(status)) {
+            return puzzleId.equals(session.getActivePuzzleId());
+        }
         return false;
     }
 

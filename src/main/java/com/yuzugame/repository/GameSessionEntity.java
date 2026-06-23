@@ -59,10 +59,6 @@ public class GameSessionEntity {
 
     @Convert(converter = SetConverter.class)
     @Column(columnDefinition = "JSON")
-    private Set<String> killedNpcs;
-
-    @Convert(converter = SetConverter.class)
-    @Column(columnDefinition = "JSON")
     private Set<String> foundItems;
 
     @Convert(converter = IntSetConverter.class)
@@ -72,10 +68,6 @@ public class GameSessionEntity {
     @Convert(converter = ListConverter.class)
     @Column(columnDefinition = "JSON")
     private List<String> yuzuInventory;
-
-    @Convert(converter = SetConverter.class)
-    @Column(columnDefinition = "JSON")
-    private Set<String> revivedNpcs;
 
     @Convert(converter = IntMapConverter.class)
     @Column(columnDefinition = "JSON")
@@ -141,11 +133,9 @@ public class GameSessionEntity {
         e.solvedPuzzles = session.getSolvedPuzzles() != null ? new HashSet<>(session.getSolvedPuzzles()) : new HashSet<>();
         e.failedPuzzles = session.getFailedPuzzles() != null ? new HashSet<>(session.getFailedPuzzles()) : new HashSet<>();
         e.unlockedNpcs = session.getUnlockedNpcs() != null ? new HashSet<>(session.getUnlockedNpcs()) : new HashSet<>();
-        e.killedNpcs = session.getKilledNpcs() != null ? new HashSet<>(session.getKilledNpcs()) : new HashSet<>();
         e.foundItems = session.getFoundItems() != null ? new HashSet<>(session.getFoundItems()) : new HashSet<>();
         e.triggeredSanityWarnings = session.getTriggeredSanityWarnings() != null ? new HashSet<>(session.getTriggeredSanityWarnings()) : new HashSet<>();
         e.yuzuInventory = session.getYuzuInventory() != null ? new ArrayList<>(session.getYuzuInventory()) : new ArrayList<>();
-        e.revivedNpcs = session.getRevivedNpcs() != null ? new HashSet<>(session.getRevivedNpcs()) : new HashSet<>();
         e.puzzleAttempts = session.getPuzzleAttempts() != null ? new HashMap<>(session.getPuzzleAttempts()) : new HashMap<>();
         e.npcDialogueCounts = session.getNpcDialogueCounts() != null ? new HashMap<>(session.getNpcDialogueCounts()) : new HashMap<>();
         e.dynamicItemNames = session.getDynamicItemNames() != null ? new HashMap<>(session.getDynamicItemNames()) : new HashMap<>();
@@ -183,11 +173,9 @@ public class GameSessionEntity {
         s.setSolvedPuzzles(solvedPuzzles != null ? new HashSet<>(solvedPuzzles) : Set.of());
         s.setFailedPuzzles(failedPuzzles != null ? new HashSet<>(failedPuzzles) : Set.of());
         s.setUnlockedNpcs(unlockedNpcs != null ? new HashSet<>(unlockedNpcs) : Set.of());
-        s.setKilledNpcs(killedNpcs != null ? new HashSet<>(killedNpcs) : Set.of());
         s.setFoundItems(foundItems != null ? new HashSet<>(foundItems) : Set.of());
         s.setTriggeredSanityWarnings(triggeredSanityWarnings != null ? new HashSet<>(triggeredSanityWarnings) : Set.of());
         s.setYuzuInventory(yuzuInventory != null ? new ArrayList<>(yuzuInventory) : List.of());
-        s.setRevivedNpcs(revivedNpcs != null ? new HashSet<>(revivedNpcs) : Set.of());
         s.setPuzzleAttempts(puzzleAttempts != null ? new HashMap<>(puzzleAttempts) : Map.of());
         s.setNpcDialogueCounts(npcDialogueCounts != null ? new HashMap<>(npcDialogueCounts) : Map.of());
         s.setDynamicItemNames(dynamicItemNames != null ? new HashMap<>(dynamicItemNames) : Map.of());

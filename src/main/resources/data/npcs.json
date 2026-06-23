@@ -32,7 +32,7 @@
     ],
     "dialogueStyle": "说话像诗句，时常在句子中嵌入意味不明的音调（用符号标记）。她的话语不按线性时间组织——有时会直接谈论未来的事件，仿佛它们已经发生。",
     "appearCondition": "turn:3",
-    "dialogueCondition": "",
+    "dialogueCondition": "puzzle:puzzle_sewer_pipes:active",
     "dialogueHint": "她站在管道网络的节点处，嘴唇微动，但发出的不是声音——而是空气的共振。她似乎在等待你主动发问。"
   },
   {
@@ -119,7 +119,7 @@
     ],
     "dialogueStyle": "不通过语言交流——如果你与它'对话'，回应会直接以感觉、图像和概念的形式出现在你的意识中。无法用文字准确描述——NpcAI 代表它以合成的方式进行极简回应：单独的词、颜色描述、或直接的中文意象。",
     "appearCondition": "chapter:ch4",
-    "dialogueCondition": "",
+    "dialogueCondition": "revelation:50",
     "dialogueHint": "容器中的雾缓缓流动。如果你静下心来，你会产生一种不可名状的确信——容器中的那个东西正在等待着你的问话。"
   },
   {
@@ -137,7 +137,7 @@
     ],
     "dialogueStyle": "极度稀少——可能几分钟都不说一个字。每个字都是经过深思熟虑的。决不会多说一个字，但说的每一句话都会推进你对事件整体图景的理解。不直接回答问题——而是给出你需要考虑的命题。",
     "appearCondition": "chapter:ch4",
-    "dialogueCondition": "",
+    "dialogueCondition": "puzzle:puzzle_lab_experiment:active",
     "dialogueHint": "它像一根柱子立在那里，一动不动。如果你不先发言，它可以在这里站到你放弃为止。它的存在本身就是一种巨大的压力——你不是在与一个人类对视，而是在与一堵注视着的墙对视。"
   },
   {
@@ -154,7 +154,7 @@
     ],
     "dialogueStyle": "宏大、沉重、带着时间的长河感。它不用第一人称——总是用'看守者'、'记录者'或'见证者'来指代自己。当谈论终极真相时，它的语速会放慢到近乎念咒的节奏。",
     "appearCondition": "chapter:ch5",
-    "dialogueCondition": "",
+    "dialogueCondition": "puzzle:puzzle_archive_truth:active",
     "dialogueHint": "空旷的阅览室中央，一张巨大的木制书桌后悬着一团微光。它没有眼睛，但你能感觉到一束沉重而古老的注意力正在注视着你们。"
   },
   {
@@ -171,8 +171,8 @@
       "'结局'不取决于它——取决于你在直面真相后，你意识的底层结构还能维持多久"
     ],
     "dialogueStyle": "不用语言——它放入你意识中的是纯粹的信息，NpcAI 以最简匹配翻译成人类能理解的概念。它'说话'的方式是一种意识中的震动——你不会听到词语，你会直接'知道'某些事实。这种沟通方式本身就会导致理智的快速流失。",
-    "appearCondition": "revelation:70",
-    "dialogueCondition": "",
+    "appearCondition": "chapter:ch5&revelation:70",
+    "dialogueCondition": "revelation:70",
     "dialogueHint": "空气中出现一道扭曲。不是温度和光线的变化——是空间本身的波动，仿佛你所处的直角坐标系突然多了一个不存在的角度。有什么东西正透过那道不可能的角度注视着你。"
   }
 ]
