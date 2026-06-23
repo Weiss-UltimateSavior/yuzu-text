@@ -11,10 +11,10 @@
       "FAIL": "失败结局——陷入疯狂，或被真相吞噬。请生成一段关于迷失与崩溃的悲剧结局叙事。"
     },
     "endingContextTemplate": "理智：{sanity}，揭露度：{revelation}，好感度：{affection}。结局类型：{endingType}",
-    "mapTransitionSolvedTemplate": "当前地图谜题已解决，出口已显现。地图切换由游戏引擎自动处理，你无需也无法使用 MAP 标签。仅输出简短的氛围描写即可。",
-    "mapTransitionFailedTemplate": "当前地图谜题已解决，出口已显现。地图切换由游戏引擎自动处理，你无需也无法使用 MAP 标签。仅输出简短的氛围描写即可。",
+    "mapTransitionSolvedTemplate": "当前地图谜题已解决，出口已开启。玩家需要主动输入'离开'或'前进'才能切换地图。仅输出简短的氛围描写即可。",
+    "mapTransitionFailedTemplate": "当前地图谜题已解决，出口已开启。玩家需要主动输入'离开'或'前进'才能切换地图。仅输出简短的氛围描写即可。",
     "mapTransitionUnsolvedTemplate": "谜题尚未解决或失败，不应切换地图。仅输出简短的氛围描写，不使用MAP标签。",
-    "mapTransitionSuffix": "地图切换由游戏引擎自动处理，不要使用 MAP 或 CHAPTER 标签。仅输出一句简短的氛围描写即可。",
+    "mapTransitionSuffix": "地图切换由玩家输入'离开'或'前进'触发，你不需要使用 MAP 或 CHAPTER 标签。仅输出一句简短的氛围描写即可。",
     "buildPromptStateTemplate": "回合数: {turn}/100\n当前地图: {mapName} ({mapId})\n当前章节: {chapter}\n章节描述: {chapterName}\n地图氛围: {atmosphere}\n玩家理智: {sanity}/100\n揭露度: {revelation}/100\n柚子好感度: {affection}/100\n当前谜题: {puzzleStatus}",
     "chatHistorySenderNames": {
       "PLAYER": "玩家",

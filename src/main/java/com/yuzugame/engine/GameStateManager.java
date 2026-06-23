@@ -229,7 +229,6 @@ public class GameStateManager {
                 case "ITEM" -> handleItem(session, action, param, agent);
                 case "NPC" -> handleNpc(session, action, param);
                 case "PUZZLE" -> handlePuzzle(session, action, param);
-                case "MAP" -> handleMap(session, action);
                 case "CHAPTER" -> handleChapter(session, action);
                 case "ENDING" -> handleEnding(session, action);
                 case "EVENT" -> handleEvent(session, action);

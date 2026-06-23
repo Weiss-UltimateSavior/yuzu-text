@@ -211,12 +211,11 @@ public class GameEngine {
         }
 
         // ---- 步骤4：探索关键词匹配 → 地图AI环境描写 ----
-        // 跳过条件1：出口已开且玩家输入含移动关键词 → 玩家意图是移动而非探索，Step8会处理
-        // 跳过条件2：谜题已激活 → 地图AI描述与谜题AI描述冗余，由谜题AI统一处理环境叙事
-        boolean tryingToMove = session.isExitUnlocked() && moveKeywords().matcher(playerMessage).find();
+        // 跳过条件：谜题已激活 → 地图AI描述与谜题AI描述冗余，由谜题AI统一处理环境叙事
+        // 注意：出口已解锁时仍允许探索，MapAI 会根据上下文判断玩家是否要离开并输出 MAP:mapId 标签
         boolean hasActivePuzzle = session.getActivePuzzleId() != null;
 
-        if (exploreKeywords().matcher(playerMessage).find() && !tryingToMove) {
+        if (exploreKeywords().matcher(playerMessage).find()) {
             if (!hasActivePuzzle) {
                 String activePuzzleBefore = session.getActivePuzzleId();
                 String mapDesc = mapAI.describe(session, currentMap);
@@ -406,7 +405,7 @@ public class GameEngine {
         // ---- 步骤8：出口解锁与地图切换 ----
         // 流程：谜题解决/失败 → 出口解锁 → 玩家输入"离开"/"前进" → 地图切换 + 过渡描写
         // 地图切换统一通过 GameStateManager.handleMap() 执行状态重置，
-        // 过渡描写、章节奖励、物品拾取在末尾统一处理（两条路径共享）
+        // 过渡描写、章节奖励、物品拾取在末尾统一处理
 
         if (!session.isExitUnlocked() && shouldCheckMapTransition(session, currentMap)) {
             session.setExitUnlocked(true);
@@ -414,7 +413,9 @@ public class GameEngine {
                 outputs.add(outputPrefix("system") + "出口已开启" + (exitHint != null ? " — " + exitHint : ""));
         }
 
-        if (session.isExitUnlocked() && moveKeywords().matcher(playerMessage).find()
+        // 地图切换：仅通过精确匹配"离开"或"前进"触发
+        // 前端有提示按钮，玩家只会输入精确的"离开"或"前进"
+        if (session.isExitUnlocked() && ("离开".equals(playerMessage) || "前进".equals(playerMessage))
                 && currentMap.getNextMapId() != null && !currentMap.getNextMapId().isBlank()) {
             stateManager.handleMap(session, currentMap.getNextMapId());
         }
