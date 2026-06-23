@@ -1,7 +1,7 @@
 {
   "director": {
     "openingMonologueTemplate": "当前gamePhase: opening。玩家正身处「{mapName}」。请基于以上场景信息输出一段面向玩家的洛夫克拉夫特式世界观引入旁白，150字以内。必须描写玩家准备进入「{mapName}」的场景，不要描写其他地点。使用<internal>记录初始状态。",
-    "stageReportTemplate": "这是第{turn}回合的阶段汇报。请输出当前局势。\n当前地图：{mapName} (章节: {chapter})\n已解谜题：{solvedPuzzles}。活跃谜题：{activePuzzle}\n理智：{sanity}，揭露度：{revelation}，好感度：{affection}",
+    "stageReportTemplate": "这是第{turn}回合的阶段汇报。请输出当前局势。\n当前地图：{mapName} (章节: {chapter})\n已解谜题：{solvedPuzzles}。活跃谜题：{activePuzzle}\n理智：{sanity}，揭露度：{revelation}，好感度：{affection}\n\n★ 谜题判定指引：如果活跃谜题的解谜条件已满足（玩家行动描述已符合solutionCriteria），请使用 PUZZLE:SOLVE:puzzleId 主动判定谜题解决，不要等待玩家显式声明。",
     "sanityWarningTemplate": "玩家理智已降至{sanity}。请在叙事中反映玩家的精神状态恶化，但不要使用控制标签改变状态。",
     "endingDefaultHints": {
       "HIDDEN": "隐藏结局——与柚子的羁绊如此之深，以至于宁愿放弃真相，也要与她一同沉沦。请生成一段关于两人携手迷失在虚妄中的结局叙事——不是悲剧，而是一种温柔的逃避。",
@@ -86,7 +86,7 @@
     "missingLabel": "缺失!",
     "turnAndSanityTemplate": "当前回合: {turn}/100\n玩家理智: {sanity}",
     "maxAttemptsReachedTemplate": "!!! 注意：尝试次数已达上限 !!!\n必须使用 PUZZLE:FAIL:{puzzleId}。同时使用 SANITY:{failSanityPenalty}。",
-    "solvingRules": "=== 解谜规则（必须严格遵守） ===\n1. 禁止在前{minRounds}轮有效交互中判定成功。谜题难度为{difficulty}，必须经过至少{minRounds}轮有意义的交互才能解决。\n2. 每轮回复必须：描述当前谜题状态 → 给出环境反馈/线索 → 等待玩家下一步操作。\n3. 如果玩家的操作过于笼统（如'破解'、'解决'、'完成'），必须要求玩家描述具体的操作步骤，不计入有效交互轮次。\n4. 逐步揭示线索：前几轮只给出模糊提示，随着交互深入才逐渐明朗。难度越高，线索越隐晦。\n5. 每次有效尝试都应伴随一定的环境变化或代价（如SANITY:-2），即使方向正确。\n6. 只有当玩家经过至少{minRounds}轮有效交互、明确描述了符合成功条件的具体操作时，才能使用PUZZLE:SOLVE。\n7. 当前交互轮次：{currentRounds}/{minRounds}(最少)\n8. !!! 关于 PUZZLE:FAIL 标签的重要规则 !!!\n   - PUZZLE:FAIL 表示玩家本次尝试失败，但谜题仍然活跃，玩家可以继续尝试。\n   - 谜题没有最大尝试次数限制，玩家可以一直尝试直到成功。\n   - 每次使用 PUZZLE:FAIL 时，必须同时使用 SANITY:{failSanityPenalty} 作为惩罚。\n   - 不要轻易使用 PUZZLE:FAIL——只有当玩家的操作方向完全错误或造成了严重后果时才使用。\n   - 如果玩家的操作部分正确但未完全解决，应给予反馈和提示，而不是直接 FAIL。",
+    "solvingRules": "=== 解谜规则（必须严格遵守） ===\n1. 禁止在前{minRounds}轮有效交互中判定成功。谜题难度为{difficulty}，必须经过至少{minRounds}轮有意义的交互才能解决。\n2. 每轮回复必须：描述当前谜题状态 → 给出环境反馈/线索 → 等待玩家下一步操作。\n3. 如果玩家的操作过于笼统（如'破解'、'解决'、'完成'），必须要求玩家描述具体的操作步骤，不计入有效交互轮次。\n4. 逐步揭示线索：前几轮只给出模糊提示，随着交互深入才逐渐明朗。难度越高，线索越隐晦。\n5. 每次有效尝试都应伴随一定的环境变化或代价（如SANITY:-2），即使方向正确。\n6. ★ 主动判定原则：当玩家经过至少{minRounds}轮有效交互后，如果玩家的行动描述已符合成功条件（不要求玩家显式声明'我到达了'或'我完成了'，根据行动上下文推断即可），应主动使用PUZZLE:SOLVE判定成功。例如：玩家描述循声前行、到达了某个关键位置，即使没有说'我到了'，只要叙事逻辑表明已满足条件，就应判定成功。\n7. 当前交互轮次：{currentRounds}/{minRounds}(最少)\n8. !!! 关于 PUZZLE:FAIL 标签的重要规则 !!!\n   - PUZZLE:FAIL 表示玩家本次尝试失败，但谜题仍然活跃，玩家可以继续尝试。\n   - 谜题没有最大尝试次数限制，玩家可以一直尝试直到成功。\n   - 每次使用 PUZZLE:FAIL 时，必须同时使用 SANITY:{failSanityPenalty} 作为惩罚。\n   - 不要轻易使用 PUZZLE:FAIL——只有当玩家的操作方向完全错误或造成了严重后果时才使用。\n   - 如果玩家的操作部分正确但未完全解决，应给予反馈和提示，而不是直接 FAIL。",
     "availableTagsTemplate": "\n可用标签:\n- PUZZLE:SOLVE:{puzzleId} — 谜题成功解决时使用\n- PUZZLE:FAIL:{puzzleId} — 本次尝试失败时使用（谜题仍活跃，可继续尝试）\n- NPC:UNLOCK:npcId — 解锁NPC（解谜成功时推荐使用，作为解谜奖励）\n- ITEM:TAKE:itemId — 消耗前置物品（有前置物品时必须使用）\n- SANITY:Δ / REVELATION:Δ / AFFECTION:Δ — 属性调整",
     "itemTakeTagTemplate": "\n!!! 谜题有前置物品，解决时必须消耗！使用 PUZZLE:SOLVE 时必须同时使用 ITEM:TAKE:{itemId}，否则标签无效！",
     "npcUnlockSection": "=== NPC解锁 ===\n当前地图中尚未解锁的NPC: {npcList}\n你可以在解谜过程中或解谜成功时使用 NPC:UNLOCK:id 来解锁NPC（每次最多1个）。解谜成功时解锁NPC是推荐的节奏——作为解谜的奖励，让玩家在推进剧情的同时认识新的角色。\n!!! 重要：使用 NPC:UNLOCK 时，你必须在叙事文本中描写该NPC的出场——描述玩家如何注意到这个角色、角色的外观和第一印象。不要让NPC凭空出现！",

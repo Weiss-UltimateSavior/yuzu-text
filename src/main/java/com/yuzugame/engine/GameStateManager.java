@@ -182,7 +182,7 @@ public class GameStateManager {
                     case "KILL", "REVIVE" -> true;
                     default -> false;
                 };
-                case "PUZZLE" -> "ACTIVATE".equals(action);
+                case "PUZZLE" -> "ACTIVATE".equals(action) || "SOLVE".equals(action);
                 case "MAP", "CHAPTER" -> false;
                 case "ENDING", "EVENT" -> true;
                 default -> false;
