@@ -39,6 +39,9 @@ public class GameDataLoader {
     private volatile List<MapConfig> mapList = Collections.emptyList();
     private volatile List<NpcConfig> npcList = Collections.emptyList();
 
+    /** 配置版本号，每次 reload 自增，用于失效 GameEngine 的模式缓存 */
+    private volatile int configVersion = 0;
+
     private GameEngine gameEngine;
 
     static String normalizeCode(String code) {
@@ -59,9 +62,15 @@ public class GameDataLoader {
     public synchronized void reload() {
         log.info("Reloading game data...");
         loadAllData();
+        configVersion++;
         if (gameEngine != null) {
             gameEngine.clearPatternCache();
         }
+    }
+
+    /** 获取当前配置版本号，用于检测配置是否已重载 */
+    public int getConfigVersion() {
+        return configVersion;
     }
 
     private void loadAllData() {
@@ -78,6 +87,10 @@ public class GameDataLoader {
         PromptsConfig newPrompts;
         GameConfig newGameConfig;
 
+        // 各文件独立加载，单文件失败不影响其他文件
+        List<String> errors = new java.util.ArrayList<>();
+
+        // items.json
         try {
             List<ItemConfig> itemList = loadJsonList("data/items.json", new TypeReference<List<ItemConfig>>() {});
             if (itemList != null) {
@@ -85,7 +98,14 @@ public class GameDataLoader {
                     if (i.getId() != null) newItems.put(i.getId(), i);
                 }
             }
+        } catch (Exception e) {
+            errors.add("items.json: " + e.getMessage());
+            log.warn("Failed to load items.json, keeping old config: {}", e.getMessage());
+            newItems = new HashMap<>(this.items);
+        }
 
+        // maps.json
+        try {
             List<MapConfig> mapsLoaded = loadJsonList("data/maps.json", new TypeReference<List<MapConfig>>() {});
             if (mapsLoaded != null) {
                 for (MapConfig m : mapsLoaded) {
@@ -93,7 +113,15 @@ public class GameDataLoader {
                 }
             }
             newMapList = mapsLoaded != null ? mapsLoaded : Collections.emptyList();
+        } catch (Exception e) {
+            errors.add("maps.json: " + e.getMessage());
+            log.warn("Failed to load maps.json, keeping old config: {}", e.getMessage());
+            newMaps = new HashMap<>(this.maps);
+            newMapList = this.mapList;
+        }
 
+        // npcs.json
+        try {
             List<NpcConfig> npcsLoaded = loadJsonList("data/npcs.json", new TypeReference<List<NpcConfig>>() {});
             if (npcsLoaded != null) {
                 for (NpcConfig n : npcsLoaded) {
@@ -101,23 +129,60 @@ public class GameDataLoader {
                 }
             }
             newNpcList = npcsLoaded != null ? npcsLoaded : Collections.emptyList();
+        } catch (Exception e) {
+            errors.add("npcs.json: " + e.getMessage());
+            log.warn("Failed to load npcs.json, keeping old config: {}", e.getMessage());
+            newNpcs = new HashMap<>(this.npcs);
+            newNpcList = this.npcList;
+        }
 
+        // puzzles.json
+        try {
             List<PuzzleConfig> puzzleList = loadJsonList("data/puzzles.json", new TypeReference<List<PuzzleConfig>>() {});
             if (puzzleList != null) {
                 for (PuzzleConfig p : puzzleList) {
                     if (p.getId() != null) newPuzzles.put(p.getId(), p);
                 }
             }
+        } catch (Exception e) {
+            errors.add("puzzles.json: " + e.getMessage());
+            log.warn("Failed to load puzzles.json, keeping old config: {}", e.getMessage());
+            newPuzzles = new HashMap<>(this.puzzles);
+        }
 
+        // story.json
+        try {
             newStory = loadJson("data/story.json", StoryConfig.class);
-            newProtagonist = loadJson("data/protagonist.json", ProtagonistConfig.class);
+        } catch (Exception e) {
+            errors.add("story.json: " + e.getMessage());
+            log.warn("Failed to load story.json, keeping old config: {}", e.getMessage());
+            newStory = this.story;
+        }
 
+        // protagonist.json
+        try {
+            newProtagonist = loadJson("data/protagonist.json", ProtagonistConfig.class);
+        } catch (Exception e) {
+            errors.add("protagonist.json: " + e.getMessage());
+            log.warn("Failed to load protagonist.json, keeping old config: {}", e.getMessage());
+            newProtagonist = this.protagonist;
+        }
+
+        // endings.json
+        try {
             List<EndingRuleConfig> endingsLoaded = loadJsonList("data/endings.json", new TypeReference<List<EndingRuleConfig>>() {});
             if (endingsLoaded != null) {
                 endingsLoaded.sort(Comparator.comparingInt(EndingRuleConfig::getPriority));
             }
             newEndings = endingsLoaded != null ? endingsLoaded : Collections.emptyList();
+        } catch (Exception e) {
+            errors.add("endings.json: " + e.getMessage());
+            log.warn("Failed to load endings.json, keeping old config: {}", e.getMessage());
+            newEndings = this.endingRules;
+        }
 
+        // redemption_codes.json
+        try {
             List<RedemptionCodeConfig> codesLoaded = loadJsonList("data/redemption_codes.json", new TypeReference<List<RedemptionCodeConfig>>() {});
             if (codesLoaded != null) {
                 for (RedemptionCodeConfig c : codesLoaded) {
@@ -126,28 +191,54 @@ public class GameDataLoader {
                     }
                 }
             }
-
-            newPrompts = loadJson("data/prompts.json", PromptsConfig.class);
-            newGameConfig = loadJson("data/game_config.json", GameConfig.class);
-
-            this.items = Collections.unmodifiableMap(newItems);
-            this.maps = Collections.unmodifiableMap(newMaps);
-            this.npcs = Collections.unmodifiableMap(newNpcs);
-            this.puzzles = Collections.unmodifiableMap(newPuzzles);
-            this.redemptionCodes = Collections.unmodifiableMap(newCodes);
-            this.endingRules = Collections.unmodifiableList(newEndings);
-            this.mapList = Collections.unmodifiableList(newMapList);
-            this.npcList = Collections.unmodifiableList(newNpcList);
-            this.story = newStory;
-            this.protagonist = newProtagonist;
-            this.prompts = newPrompts;
-            this.gameConfig = newGameConfig;
-
-            log.info("Game data loaded: {} items, {} maps, {} npcs, {} puzzles, {} endings, {} codes",
-                    items.size(), maps.size(), npcs.size(), puzzles.size(), endingRules.size(), redemptionCodes.size());
         } catch (Exception e) {
-            throw new RuntimeException("Failed to load game data: " + e.getMessage(), e);
+            errors.add("redemption_codes.json: " + e.getMessage());
+            log.warn("Failed to load redemption_codes.json, keeping old config: {}", e.getMessage());
+            newCodes = new HashMap<>(this.redemptionCodes);
         }
+
+        // prompts.json
+        try {
+            newPrompts = loadJson("data/prompts.json", PromptsConfig.class);
+        } catch (Exception e) {
+            errors.add("prompts.json: " + e.getMessage());
+            log.warn("Failed to load prompts.json, keeping old config: {}", e.getMessage());
+            newPrompts = this.prompts;
+        }
+
+        // game_config.json
+        try {
+            newGameConfig = loadJson("data/game_config.json", GameConfig.class);
+        } catch (Exception e) {
+            errors.add("game_config.json: " + e.getMessage());
+            log.warn("Failed to load game_config.json, keeping old config: {}", e.getMessage());
+            newGameConfig = this.gameConfig;
+        }
+
+        // 首次加载（旧配置为空）时，若关键配置缺失则抛出异常阻止启动
+        if (newStory == null) {
+            throw new RuntimeException("Critical config story.json failed to load and no previous config available");
+        }
+        if (newGameConfig == null) {
+            throw new RuntimeException("Critical config game_config.json failed to load and no previous config available");
+        }
+
+        this.items = Collections.unmodifiableMap(newItems);
+        this.maps = Collections.unmodifiableMap(newMaps);
+        this.npcs = Collections.unmodifiableMap(newNpcs);
+        this.puzzles = Collections.unmodifiableMap(newPuzzles);
+        this.redemptionCodes = Collections.unmodifiableMap(newCodes);
+        this.endingRules = Collections.unmodifiableList(newEndings);
+        this.mapList = Collections.unmodifiableList(newMapList);
+        this.npcList = Collections.unmodifiableList(newNpcList);
+        this.story = newStory;
+        this.protagonist = newProtagonist;
+        this.prompts = newPrompts;
+        this.gameConfig = newGameConfig;
+
+        log.info("Game data loaded: {} items, {} maps, {} npcs, {} puzzles, {} endings, {} codes{}",
+                items.size(), maps.size(), npcs.size(), puzzles.size(), endingRules.size(), redemptionCodes.size(),
+                errors.isEmpty() ? "" : " (with " + errors.size() + " errors: " + String.join("; ", errors) + ")");
     }
 
     private InputStream resolveResource(String classpathPath) throws Exception {

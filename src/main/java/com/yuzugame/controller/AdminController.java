@@ -1,6 +1,7 @@
 package com.yuzugame.controller;
 
 import com.yuzugame.service.AdminService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -23,19 +24,30 @@ public class AdminController {
     }
 
     @PostMapping("/login")
-    public Map<String, Object> login(@RequestBody Map<String, String> body) {
+    public Map<String, Object> login(@RequestBody Map<String, String> body, HttpServletRequest request) {
         String username = body.get("username");
         String password = body.get("password");
-        String token = adminService.login(username, password);
+        String clientIp = extractClientIp(request);
+        String token = adminService.login(username, password, clientIp);
         Map<String, Object> result = new LinkedHashMap<>();
         if (token != null) {
             result.put("success", true);
             result.put("token", token);
         } else {
             result.put("success", false);
-            result.put("message", "Invalid credentials");
+            result.put("message", "Invalid credentials or rate limited");
         }
         return result;
+    }
+
+    /** 提取真实客户端 IP，考虑 X-Forwarded-For 头 */
+    private String extractClientIp(HttpServletRequest request) {
+        String xff = request.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            // 取第一个 IP（最原始的客户端）
+            return xff.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 
     @GetMapping("/stats/players")
@@ -110,14 +122,16 @@ public class AdminController {
     }
 
     @GetMapping("/data/export")
-    public ResponseEntity<byte[]> exportData(@RequestHeader("X-Admin-Token") String token) {
+    public ResponseEntity<org.springframework.core.io.InputStreamResource> exportData(@RequestHeader("X-Admin-Token") String token) {
         requireAuth(token);
         try {
-            byte[] zip = adminService.exportAllData();
+            java.io.InputStream stream = adminService.exportAllDataStream();
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
             headers.setContentDispositionFormData("attachment", "game-data.zip");
-            return ResponseEntity.ok().headers(headers).body(zip);
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(new org.springframework.core.io.InputStreamResource(stream));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().build();
         }
@@ -205,7 +219,7 @@ public class AdminController {
         return result;
     }
 
-    @GetMapping("/admin/info")
+    @GetMapping("/info")
     public Map<String, Object> getAdminInfo(@RequestHeader("X-Admin-Token") String token) {
         requireAuth(token);
         Map<String, Object> result = new LinkedHashMap<>();
@@ -213,7 +227,7 @@ public class AdminController {
         return result;
     }
 
-    @PutMapping("/admin/credentials")
+    @PutMapping("/credentials")
     public Map<String, Object> updateAdminCredentials(@RequestHeader("X-Admin-Token") String token,
                                                        @RequestBody Map<String, String> body) {
         requireAuth(token);

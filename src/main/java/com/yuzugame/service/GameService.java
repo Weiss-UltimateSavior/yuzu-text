@@ -6,6 +6,7 @@ import com.yuzugame.engine.GameEngine;
 import com.yuzugame.model.*;
 import com.yuzugame.repository.GameSessionEntity;
 import com.yuzugame.repository.GameSessionRepository;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,14 +28,14 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>存储架构 —— 二级缓存：
  * <ol>
- *   <li><b>Redis（一级缓存）</b> —— 活跃会话的快速读写，TTL 2 小时</li>
+ *   <li><b>Redis（一级缓存）</b> —— 活跃会话的快速读写，TTL {@value #REDIS_TTL_HOURS} 小时</li>
  *   <li><b>MySQL（持久存储）</b> —— 所有会话的持久化，服务重启不丢失</li>
  * </ol></p>
  *
  * <p>读写策略：
  * <ul>
  *   <li>读：Redis → MySQL → null（Cache-Aside 模式）</li>
- *   <li>写：先更新 MySQL，再删除 Redis 缓存（下次读取时回填）</li>
+ *   <li>写：先写 Redis 缓存保证可用性，再写 MySQL 持久化；MySQL 失败时异步重试</li>
  *   <li>每次玩家操作后，会话同步写入 MySQL 保证持久性</li>
  * </ul></p>
  */
@@ -44,6 +45,16 @@ public class GameService {
     private static final Logger log = LoggerFactory.getLogger(GameService.class);
     private static final long REDIS_TTL_HOURS = 6;
     private static final String REDIS_KEY_PREFIX = "yuzu:session:";
+    /** 玩家单条消息最大长度 */
+    private static final int MAX_PLAYER_MESSAGE_LENGTH = 200;
+
+    /** MySQL 写入失败时的异步重试线程池 */
+    private final java.util.concurrent.ExecutorService retryExecutor =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "session-save-retry");
+                t.setDaemon(true);
+                return t;
+            });
 
     private final GameEngine engine;
     private final GameSessionRepository repository;
@@ -55,6 +66,20 @@ public class GameService {
 
     @Value("${yuzu.field-encryption-key:}")
     private String fieldEncryptionKey;
+
+    @PreDestroy
+    void shutdown() {
+        retryExecutor.shutdown();
+        try {
+            if (!retryExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                log.warn("Retry executor did not terminate in 5s, forcing shutdown");
+                retryExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            retryExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
 
     public GameService(GameEngine engine, GameSessionRepository repository,
                        StringRedisTemplate redisTemplate, ObjectMapper objectMapper,
@@ -113,8 +138,8 @@ public class GameService {
         if (message == null) {
             return Map.of("error", "Message is required");
         }
-        if (message.length() > 200) {
-            return Map.of("error", "消息过长，最多200字");
+        if (message.length() > MAX_PLAYER_MESSAGE_LENGTH) {
+            return Map.of("error", "消息过长，最多" + MAX_PLAYER_MESSAGE_LENGTH + "字");
         }
 
         GameSession session = loadSession(sessionId);
@@ -189,16 +214,9 @@ public class GameService {
                     if (host == null || host.isBlank()) {
                         return Map.of("success", false, "message", "API 校验失败：URL 格式无效");
                     }
-                    byte[] addr = java.net.InetAddress.getByName(host).getAddress();
-                    if (addr.length == 4 && (addr[0] == 0 || addr[0] == 10
-                            || (addr[0] == (byte) 172 && addr[1] >= 16 && addr[1] <= 31)
-                            || (addr[0] == (byte) 192 && addr[1] == (byte) 168)
-                            || (addr[0] == (byte) 127))) {
-                        return Map.of("success", false, "message", "API 校验失败：不允许使用内网地址");
-                    }
-                    if (addr.length == 16 && addr[0] == 0 && addr[1] == 0 && addr[2] == 0
-                            && (addr[3] == 0 || addr[3] == 1)) {
-                        return Map.of("success", false, "message", "API 校验失败：不允许使用内网地址");
+                    String validationError = validateLlmHost(host);
+                    if (validationError != null) {
+                        return Map.of("success", false, "message", validationError);
                     }
                 } catch (Exception e) {
                     return Map.of("success", false, "message", "API 校验失败：URL 格式无效 - " + e.getMessage());
@@ -216,6 +234,58 @@ public class GameService {
         saveSession(session);
         log.info("LLM config updated for session {}: model={}", sessionId, model);
         return Map.of("success", true, "message", isClearing ? "已恢复使用系统默认 API" : "LLM 配置已更新并校验通过");
+    }
+
+    /**
+     * 校验 LLM API 主机是否安全（防 SSRF）。
+     *
+     * <p>检查所有解析到的 IP 地址，拒绝内网/回环/链路本地等地址。
+     * 注意：DNS 重绑定攻击仍可能在校验后变更解析结果，
+     * 生产环境应在 HttpClient 层固定解析的 IP。</p>
+     *
+     * @param host 主机名
+     * @return 错误消息，null 表示通过
+     */
+    private String validateLlmHost(String host) {
+        try {
+            java.net.InetAddress[] all = java.net.InetAddress.getAllByName(host);
+            for (java.net.InetAddress addr : all) {
+                if (isPrivateOrLoopback(addr)) {
+                    return "API 校验失败：不允许使用内网地址 (" + addr.getHostAddress() + ")";
+                }
+            }
+            return null;
+        } catch (java.net.UnknownHostException e) {
+            return "API 校验失败：无法解析主机名 - " + e.getMessage();
+        }
+    }
+
+    /** 判断地址是否为内网/回环/链路本地/多播等不可访问外网地址 */
+    private boolean isPrivateOrLoopback(java.net.InetAddress addr) {
+        // isLoopbackAddress() 覆盖 IPv4 127.0.0.0/8 和 IPv6 ::1
+        // isSiteLocalAddress() 覆盖 IPv4 RFC 1918 私有地址（10/8, 172.16/12, 192.168/16）
+        // isLinkLocalAddress() 覆盖 IPv4 169.254/16 和 IPv6 fe80::/10
+        // isAnyLocalAddress() 覆盖 0.0.0.0 和 ::
+        if (addr.isLoopbackAddress() || addr.isSiteLocalAddress()
+                || addr.isLinkLocalAddress() || addr.isAnyLocalAddress()
+                || addr.isMulticastAddress()) {
+            return true;
+        }
+        // IPv6 唯一本地地址 fc00::/7（isSiteLocalAddress 不覆盖 ULA）
+        if (addr instanceof java.net.Inet6Address v6) {
+            byte[] b = v6.getAddress();
+            if (b.length == 16) {
+                int firstByte = b[0] & 0xff;
+                // fc00::/7 -> 首字节 0xfc 或 0xfd
+                if (firstByte == 0xfc || firstByte == 0xfd) return true;
+            }
+        }
+        // IPv4 0.0.0.0/8（isAnyLocalAddress 仅匹配 0.0.0.0 本身）
+        if (addr instanceof java.net.Inet4Address v4) {
+            byte[] b = v4.getAddress();
+            if (b.length == 4 && b[0] == 0) return true;
+        }
+        return false;
     }
 
     public Map<String, Object> redeemCode(String sessionId, String code) {
@@ -318,38 +388,63 @@ public class GameService {
     }
 
     /**
-     * 保存会话 —— 双写 MySQL + Redis。
+     * 保存会话 —— 先写 Redis 缓存（快速、保证可用性），再异步重试写 MySQL。
      *
-     * <p>先写 MySQL 保证持久性，再写 Redis 保证缓存一致性。</p>
+     * <p>策略调整说明：
+     * <ul>
+     *   <li>先写 Redis：保证后续读取可用，避免阻塞请求线程</li>
+     *   <li>MySQL 写入失败时记录到异步重试队列，由后台线程重试</li>
+     *   <li>避免请求线程被重试 sleep 阻塞，防止 Tomcat 线程池耗尽</li>
+     * </ul></p>
      */
     private void saveSession(GameSession session) {
-        boolean saved = false;
-        for (int attempt = 1; attempt <= 3 && !saved; attempt++) {
-            try {
-                GameSessionEntity entity = GameSessionEntity.fromModel(session, resolveEncryptionKey());
-                repository.findById(session.getSessionId()).ifPresent(existing -> {
-                    entity.setCreatedAt(existing.getCreatedAt());
-                });
-                repository.save(entity);
-                saved = true;
-            } catch (Exception e) {
-                log.error("Failed to save session to MySQL (attempt {}/3): {}", attempt, e.getMessage());
-                if (attempt < 3) {
-                    try { Thread.sleep(1000 * attempt); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
-                }
-            }
-        }
-
-        if (saved) {
-            cacheToRedis(session);
-        } else {
-            cacheToRedis(session);
-            log.error("MySQL save failed after 3 attempts for session {}, kept Redis cache as fallback", session.getSessionId());
+        // 先写 Redis 缓存，保证后续读取可用
+        cacheToRedis(session);
+        // 同步尝试一次 MySQL 写入（快速失败）
+        try {
+            GameSessionEntity entity = GameSessionEntity.fromModel(session, resolveEncryptionKey());
+            repository.findById(session.getSessionId()).ifPresent(existing -> {
+                entity.setCreatedAt(existing.getCreatedAt());
+            });
+            repository.save(entity);
+        } catch (Exception e) {
+            log.error("MySQL save failed for session {}, queued for async retry: {}",
+                    session.getSessionId(), e.getMessage());
+            // 异步重试，不阻塞请求线程
+            asyncRetrySave(session);
         }
     }
 
+    /** 异步重试保存到 MySQL，最多 3 次，间隔递增 */
+    private void asyncRetrySave(GameSession session) {
+        retryExecutor.submit(() -> {
+            for (int attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    Thread.sleep(1000L * attempt);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                try {
+                    GameSessionEntity entity = GameSessionEntity.fromModel(session, resolveEncryptionKey());
+                    repository.findById(session.getSessionId()).ifPresent(existing -> {
+                        entity.setCreatedAt(existing.getCreatedAt());
+                    });
+                    repository.save(entity);
+                    log.info("Async retry save succeeded for session {} on attempt {}",
+                            session.getSessionId(), attempt);
+                    return;
+                } catch (Exception e) {
+                    log.warn("Async retry save attempt {}/3 failed for session {}: {}",
+                            attempt, session.getSessionId(), e.getMessage());
+                }
+            }
+            log.error("All async retry attempts failed for session {}", session.getSessionId());
+        });
+    }
+
     /**
-     * 将会话写入 Redis 缓存，TTL 2 小时。
+     * 将会话写入 Redis 缓存，TTL {@value #REDIS_TTL_HOURS} 小时。
      */
     private void cacheToRedis(GameSession session) {
         try {

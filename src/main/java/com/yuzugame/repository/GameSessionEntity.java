@@ -101,7 +101,8 @@ public class GameSessionEntity {
     @Column(length = 512)
     private String customLlmBaseUrl;
 
-    @Column(length = 256)
+    /** 加密后的 API Key（含 "ENC:" 前缀 + Base64(IV + 密文 + GCM tag)），需要足够长度 */
+    @Column(length = 1024)
     private String customLlmApiKey;
 
     @Column(length = 128)

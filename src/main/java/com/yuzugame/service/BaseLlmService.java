@@ -35,10 +35,12 @@ public abstract class BaseLlmService {
 
     private final AtomicReference<LlmConfig> configRef = new AtomicReference<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
+    /** 共享 HttpClient 实例，所有子类复用同一连接池，避免重复创建 */
+    private static final HttpClient SHARED_CLIENT = createClient();
     private final HttpClient client;
 
     protected BaseLlmService() {
-        this.client = createClient();
+        this.client = SHARED_CLIENT;
     }
 
     /** 子类指定最大重试次数 */

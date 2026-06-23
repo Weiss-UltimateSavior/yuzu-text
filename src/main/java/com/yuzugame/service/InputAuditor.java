@@ -2,6 +2,7 @@ package com.yuzugame.service;
 
 import com.yuzugame.engine.GameDataLoader;
 import com.yuzugame.model.PromptsConfig;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -12,6 +13,8 @@ import java.util.List;
 public class InputAuditor {
 
     private static final Logger log = LoggerFactory.getLogger(InputAuditor.class);
+    /** ObjectMapper 线程安全且初始化开销大，应全局重用 */
+    private static final ObjectMapper OM = new ObjectMapper();
 
     private final AuditLlmService auditLlmService;
     private final GameDataLoader dataLoader;
@@ -58,7 +61,9 @@ public class InputAuditor {
                 String trimmed = result.trim();
                 boolean blocked = isBlocked(trimmed);
                 if (blocked) {
-                    log.warn("Input blocked by LLM audit, input: {}", truncateForLog(playerMessage));
+                    // 日志中仅记录输入长度和哈希，避免泄露玩家隐私内容
+                    log.warn("Input blocked by LLM audit, length={}, hash={}",
+                            playerMessage.length(), hashForLog(playerMessage));
                     return generateWarning();
                 }
             }
@@ -70,16 +75,41 @@ public class InputAuditor {
         return null;
     }
 
+    /**
+     * 解析 LLM 审核结果，判断是否拦截。
+     *
+     * <p>优先解析结构化 JSON 输出（{"blocked": true/false}），
+     * 若非 JSON 则回退到首行关键词匹配，要求 LLM 在首行明确输出 BLOCK 或 PASS。</p>
+     */
     private boolean isBlocked(String result) {
-        String upper = result.toUpperCase();
-        if (upper.contains("BLOCK") || upper.contains("REJECT") || upper.contains("拒绝")) {
-            return true;
-        }
+        if (result == null || result.isBlank()) return false;
         String trimmed = result.trim();
-        if (trimmed.equals("是") || trimmed.equals("YES") || trimmed.equals("Y")) {
+
+        // 优先尝试 JSON 解析
+        if (trimmed.startsWith("{")) {
+            try {
+                com.fasterxml.jackson.databind.JsonNode node = OM.readTree(trimmed);
+                if (node.has("blocked")) {
+                    return node.get("blocked").asBoolean(false);
+                }
+                if (node.has("block")) {
+                    return node.get("block").asBoolean(false);
+                }
+            } catch (Exception ignored) {
+                // 非 JSON 或解析失败，回退到关键词匹配
+            }
+        }
+
+        // 回退：检查首行是否为明确的 BLOCK 标识
+        String firstLine = trimmed.split("\\r?\\n", 2)[0].trim().toUpperCase();
+        // 严格匹配 BLOCK 或 BLOCKED，避免误匹配 UNBLOCK
+        if (firstLine.equals("BLOCK") || firstLine.equals("BLOCKED")
+                || firstLine.equals("REJECT") || firstLine.equals("REJECTED")
+                || firstLine.equals("拒绝") || firstLine.equals("拦截")) {
             return true;
         }
-        if (trimmed.startsWith("是，") || trimmed.startsWith("是。") || trimmed.startsWith("是 ")) {
+        // 首行以 BLOCK: 或 REJECT: 开头
+        if (firstLine.startsWith("BLOCK:") || firstLine.startsWith("REJECT:")) {
             return true;
         }
         return false;
@@ -95,8 +125,18 @@ public class InputAuditor {
         return "【系统警告】" + warning;
     }
 
-    private String truncateForLog(String input) {
-        if (input.length() <= 100) return input;
-        return input.substring(0, 100) + "...";
+    /** 计算输入的 SHA-256 哈希前 8 位，用于日志追踪而不泄露内容 */
+    private String hashForLog(String input) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < 4; i++) {
+                sb.append(String.format("%02x", hash[i]));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "unknown";
+        }
     }
 }

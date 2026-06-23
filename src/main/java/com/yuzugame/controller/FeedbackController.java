@@ -21,6 +21,10 @@ public class FeedbackController {
     private static final Logger log = LoggerFactory.getLogger(FeedbackController.class);
     private static final int MAX_SUBMISSIONS_PER_IP = 5;
     private static final long RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+    /** 反馈正文最大长度 */
+    private static final int MAX_FEEDBACK_CONTENT_LENGTH = 2000;
+    /** 联系方式最大长度 */
+    private static final int MAX_CONTACT_LENGTH = 128;
 
     private final FeedbackRepository feedbackRepository;
     private final ConcurrentHashMap<String, RateLimitEntry> rateLimitMap = new ConcurrentHashMap<>();
@@ -58,12 +62,15 @@ public class FeedbackController {
 
     private boolean isRateLimited(String ip) {
         long now = System.currentTimeMillis();
-        RateLimitEntry entry = rateLimitMap.get(ip);
-        if (entry == null || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
-            rateLimitMap.put(ip, new RateLimitEntry(now));
-            return false;
-        }
-        return entry.count.incrementAndGet() > MAX_SUBMISSIONS_PER_IP;
+        // 使用 compute 原子操作，避免 check-then-act 竞态导致并发请求绕过限流
+        RateLimitEntry entry = rateLimitMap.compute(ip, (key, existing) -> {
+            if (existing == null || now - existing.windowStart > RATE_LIMIT_WINDOW_MS) {
+                return new RateLimitEntry(now);
+            }
+            existing.count.incrementAndGet();
+            return existing;
+        });
+        return entry.count.get() > MAX_SUBMISSIONS_PER_IP;
     }
 
     /**
@@ -86,11 +93,13 @@ public class FeedbackController {
     }
 
     private boolean isTrustedProxy(String addr) {
-        return "127.0.0.1".equals(addr) || "0:0:0:0:0:0:0:1".equals(addr)
-                || addr.startsWith("10.") || addr.startsWith("192.168.")
-                || addr.startsWith("172.16.") || addr.startsWith("172.17.")
-                || addr.startsWith("172.18.") || addr.startsWith("172.19.")
-                || addr.startsWith("172.2") || addr.startsWith("172.3");
+        try {
+            java.net.InetAddress inet = java.net.InetAddress.getByName(addr);
+            // 信任回环和内网地址（RFC 1918 / RFC 4193）
+            return inet.isLoopbackAddress() || inet.isSiteLocalAddress();
+        } catch (java.net.UnknownHostException e) {
+            return false;
+        }
     }
 
     @PostMapping("/submit")
@@ -109,10 +118,10 @@ public class FeedbackController {
         if (content.isEmpty()) {
             return Map.of("ok", false, "error", "建议内容不能为空"); // 内容必填
         }
-        if (content.length() > 2000) {
-            return Map.of("ok", false, "error", "建议内容不能超过2000字"); // 防止超长输入
+        if (content.length() > MAX_FEEDBACK_CONTENT_LENGTH) {
+            return Map.of("ok", false, "error", "建议内容不能超过" + MAX_FEEDBACK_CONTENT_LENGTH + "字"); // 防止超长输入
         }
-        if (contact.length() > 128) {
+        if (contact.length() > MAX_CONTACT_LENGTH) {
             return Map.of("ok", false, "error", "联系方式过长"); // 联系方式长度限制
         }
 

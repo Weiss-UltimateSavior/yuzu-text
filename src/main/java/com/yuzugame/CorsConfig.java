@@ -24,8 +24,9 @@ public class CorsConfig {
                 }
             }
         } else {
-            // 开发模式默认允许 localhost
+            // 开发模式默认仅允许 localhost
             config.addAllowedOriginPattern("http://localhost:*");
+            config.addAllowedOriginPattern("https://localhost:*");
         }
         config.addAllowedMethod("*");
         config.addAllowedHeader("*");

@@ -1,6 +1,5 @@
 package com.yuzugame.service;
 
-import com.yuzugame.YuzuGameApplication;
 import com.yuzugame.engine.GameDataLoader;
 import com.yuzugame.model.Feedback;
 import com.yuzugame.repository.FeedbackRepository;
@@ -9,7 +8,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -48,8 +46,16 @@ public class AdminService {
     private volatile String adminUsername;
     private volatile String adminPasswordHash;
 
-    private final Map<String, Long> activeTokens = new HashMap<>();
+    /** 使用 ConcurrentHashMap 替代 HashMap + synchronized，提升并发性能 */
+    private final Map<String, Long> activeTokens = new java.util.concurrent.ConcurrentHashMap<>();
     private static final long TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+
+    /** 登录失败计数器：IP -> [失败次数, 首次失败时间戳ms] */
+    private final Map<String, long[]> loginFailures = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final int LOGIN_MAX_FAILURES = 5;
+    private static final long LOGIN_LOCK_WINDOW_MS = 15 * 60 * 1000;
+    private static final long LOGIN_FAILURE_TTL_MS = 30 * 60 * 1000;
+
     private final ScheduledExecutorService tokenCleanupScheduler;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder(12);
@@ -82,9 +88,11 @@ public class AdminService {
         tokenCleanupScheduler.shutdown();
     }
 
-    private synchronized void cleanupExpiredTokens() {
+    private void cleanupExpiredTokens() {
         long now = System.currentTimeMillis();
         activeTokens.entrySet().removeIf(e -> now > e.getValue());
+        // 清理过期的登录失败记录
+        loginFailures.entrySet().removeIf(e -> now - e.getValue()[1] > LOGIN_FAILURE_TTL_MS);
     }
 
     @PostConstruct
@@ -109,7 +117,8 @@ public class AdminService {
                     saveAdminConfig();
                     log.info("Migrated legacy plaintext password to BCrypt format");
                 }
-                log.info("Admin credentials loaded from admin.json");
+                log.info("Admin credentials loaded from admin.json (overrides environment variables). " +
+                        "If you forgot the password, delete admin.json to use ADMIN_USERNAME/ADMIN_PASSWORD env vars.");
             } catch (Exception e) {
                 log.warn("Failed to load admin.json, using defaults");
                 initDefaultCredentials();
@@ -143,18 +152,59 @@ public class AdminService {
         }
     }
 
-    public synchronized String login(String username, String password) {
+    /**
+     * 管理员登录。包含基于 IP 的速率限制：连续失败 5 次后锁定 15 分钟。
+     *
+     * @param username 用户名
+     * @param password 密码
+     * @param clientIp 客户端 IP，用于限流
+     * @return 登录成功返回 token，失败或被限流返回 null
+     */
+    public String login(String username, String password, String clientIp) {
         if (username == null || password == null) return null;
-        if (adminUsername == null || adminPasswordHash == null) return null;
-        if (!adminUsername.equals(username) || !passwordEncoder.matches(password, adminPasswordHash)) {
+        if (clientIp != null && isLoginLocked(clientIp)) {
+            log.warn("Login attempt blocked by rate limit for IP: {}", clientIp);
             return null;
         }
+        if (adminUsername == null || adminPasswordHash == null) return null;
+        boolean success = adminUsername.equals(username) && passwordEncoder.matches(password, adminPasswordHash);
+        if (clientIp != null) {
+            if (success) {
+                loginFailures.remove(clientIp);
+            } else {
+                recordLoginFailure(clientIp);
+            }
+        }
+        if (!success) return null;
         String token = UUID.randomUUID().toString().replace("-", "");
         activeTokens.put(token, System.currentTimeMillis() + TOKEN_TTL_MS);
         return token;
     }
 
-    public synchronized boolean validateToken(String token) {
+    private boolean isLoginLocked(String ip) {
+        long[] state = loginFailures.get(ip);
+        if (state == null) return false;
+        long now = System.currentTimeMillis();
+        if (now - state[1] > LOGIN_LOCK_WINDOW_MS) {
+            // 锁定窗口已过，重置
+            loginFailures.remove(ip);
+            return false;
+        }
+        return state[0] >= LOGIN_MAX_FAILURES;
+    }
+
+    private void recordLoginFailure(String ip) {
+        long now = System.currentTimeMillis();
+        loginFailures.compute(ip, (k, v) -> {
+            if (v == null || now - v[1] > LOGIN_LOCK_WINDOW_MS) {
+                return new long[]{1, now};
+            }
+            v[0]++;
+            return v;
+        });
+    }
+
+    public boolean validateToken(String token) {
         if (token == null) return false;
         Long expiry = activeTokens.get(token);
         if (expiry == null) return false;
@@ -342,28 +392,33 @@ public class AdminService {
 
     private volatile boolean restarting = false;
 
+    /**
+     * 触发应用优雅关闭，由外部进程管理器（systemd/Docker/K8s）负责重启。
+     *
+     * <p>进程内重启（旧实现通过 context.close() + SpringApplication.run()）存在多重风险：
+     * 旧上下文关闭期间服务不可用、新旧上下文短暂共存导致端口冲突、启动失败后无法恢复。
+     * 正确做法是仅触发关闭，由外部进程管理器自动拉起新实例。</p>
+     */
     public synchronized void restart() {
         if (restarting) {
             log.warn("Restart already in progress, ignoring duplicate request");
             return;
         }
         restarting = true;
-        log.info("Game restart requested via admin API");
+        log.info("Application shutdown requested via admin API, external supervisor should restart it");
+        // 异步关闭，使当前 HTTP 响应能正常返回后再退出
         Thread t = new Thread(() -> {
             try {
-                Thread.sleep(2000);
+                Thread.sleep(1500);
+                log.info("Shutting down application context for restart");
                 context.close();
-                Thread.sleep(1000);
-                SpringApplication.run(YuzuGameApplication.class);
-                log.info("Game restarted successfully");
+                System.exit(0);
             } catch (Exception e) {
-                log.error("Failed to restart", e);
-            } finally {
+                log.error("Failed to shut down for restart", e);
                 restarting = false;
             }
-        });
-        t.setDaemon(false);
-        t.setName("admin-restart");
+        }, "admin-shutdown");
+        t.setDaemon(true);
         t.start();
     }
 
@@ -389,6 +444,63 @@ public class AdminService {
         return target;
     }
 
+    /**
+     * 流式导出所有数据文件为 ZIP。
+     *
+     * <p>使用 PipedInputStream/PipedOutputStream 避免全量加载到内存，
+     * 适合数据量较大的场景。调用方应在 try-with-resources 中使用返回的 InputStream。</p>
+     */
+    public java.io.InputStream exportAllDataStream() throws Exception {
+        String dir = resolveDataDir();
+        File folder = new File(dir);
+        if (!folder.exists() || !folder.isDirectory()) {
+            throw new RuntimeException("Data directory not found: " + dir);
+        }
+
+        java.io.PipedInputStream pis = new java.io.PipedInputStream(64 * 1024);
+        java.io.PipedOutputStream pos = new java.io.PipedOutputStream(pis);
+        java.util.concurrent.atomic.AtomicReference<Throwable> errorRef = new java.util.concurrent.atomic.AtomicReference<>();
+
+        Thread writer = new Thread(() -> {
+            try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(pos)) {
+                File[] files = folder.listFiles((d, name) -> name.endsWith(".json") && !isProtectedFile(name));
+                if (files != null) {
+                    byte[] buf = new byte[8192];
+                    for (File f : files) {
+                        zos.putNextEntry(new java.util.zip.ZipEntry(f.getName()));
+                        try (java.io.InputStream fis = java.nio.file.Files.newInputStream(f.toPath())) {
+                            int len;
+                            while ((len = fis.read(buf)) > 0) {
+                                zos.write(buf, 0, len);
+                            }
+                        }
+                        zos.closeEntry();
+                    }
+                }
+                zos.finish();
+            } catch (Exception e) {
+                errorRef.set(e);
+                log.error("Failed to write export zip stream: {}", e.getMessage());
+            }
+        }, "data-export");
+        writer.setDaemon(true);
+        writer.start();
+
+        // 包装流：在关闭时检查 writer 是否出错，若有错误则抛出
+        return new java.io.FilterInputStream(pis) {
+            @Override
+            public void close() throws java.io.IOException {
+                super.close();
+                Throwable err = errorRef.get();
+                if (err != null) {
+                    throw new java.io.IOException("Export stream failed: " + err.getMessage(), err);
+                }
+            }
+        };
+    }
+
+    /** @deprecated 使用 {@link #exportAllDataStream()} 替代，避免大内存占用 */
+    @Deprecated
     public byte[] exportAllData() throws Exception {
         String dir = resolveDataDir();
         File folder = new File(dir);

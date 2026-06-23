@@ -54,9 +54,12 @@ public class GameEngine {
     private final InputAuditor inputAuditor;
     private final ObjectMapper objectMapper;
 
-    private Pattern exploreKeywordsPattern;
-    private Pattern moveKeywordsPattern;
-    private Pattern npcMentionPattern;
+    /** 模式缓存使用 volatile 保证多线程可见性，避免读到部分构造对象 */
+    private volatile Pattern exploreKeywordsPattern;
+    private volatile Pattern moveKeywordsPattern;
+    private volatile Pattern npcMentionPattern;
+    /** 缓存版本，与 GameDataLoader 配置版本对应，配置重载时失效 */
+    private volatile int patternCacheVersion = -1;
 
     public GameEngine(DirectorAI director, ProtagonistAI protagonist, MapAI mapAI,
                       NpcAI npcAI, PuzzleAI puzzleAI, GameStateManager stateManager,
@@ -79,34 +82,82 @@ public class GameEngine {
         return dataLoader.getGameConfig();
     }
 
-    private Pattern exploreKeywords() {
-        if (exploreKeywordsPattern == null) {
-            String kw = gameConfig().getExploreKeywords();
-            exploreKeywordsPattern = Pattern.compile(kw != null ? kw : "探索|查看|观察|检查|搜索");
+    /** 检查配置版本，若配置已重载则清空模式缓存 */
+    private void refreshPatternCacheIfNeeded() {
+        int currentVersion = dataLoader.getConfigVersion();
+        if (patternCacheVersion != currentVersion) {
+            synchronized (this) {
+                if (patternCacheVersion != currentVersion) {
+                    exploreKeywordsPattern = null;
+                    moveKeywordsPattern = null;
+                    npcMentionPattern = null;
+                    patternCacheVersion = currentVersion;
+                }
+            }
         }
-        return exploreKeywordsPattern;
+    }
+
+    private Pattern exploreKeywords() {
+        refreshPatternCacheIfNeeded();
+        Pattern p = exploreKeywordsPattern;
+        if (p == null) {
+            synchronized (this) {
+                p = exploreKeywordsPattern;
+                if (p == null) {
+                    String kw = gameConfig().getExploreKeywords();
+                    p = Pattern.compile(kw != null ? kw : "探索|查看|观察|检查|搜索");
+                    exploreKeywordsPattern = p;
+                }
+            }
+        }
+        return p;
     }
 
     private Pattern moveKeywords() {
-        if (moveKeywordsPattern == null) {
-            String kw = gameConfig().getMoveKeywords();
-            moveKeywordsPattern = Pattern.compile(kw != null ? kw : "离开|前进|走|移动|前往");
+        refreshPatternCacheIfNeeded();
+        Pattern p = moveKeywordsPattern;
+        if (p == null) {
+            synchronized (this) {
+                p = moveKeywordsPattern;
+                if (p == null) {
+                    String kw = gameConfig().getMoveKeywords();
+                    p = Pattern.compile(kw != null ? kw : "离开|前进|走|移动|前往");
+                    moveKeywordsPattern = p;
+                }
+            }
         }
-        return moveKeywordsPattern;
+        return p;
     }
 
     private Pattern npcMention() {
-        if (npcMentionPattern == null) {
-            String kw = gameConfig().getNpcMentionPattern();
-            npcMentionPattern = Pattern.compile(kw != null ? kw : "@(.+?)\\s+(.+)");
+        refreshPatternCacheIfNeeded();
+        Pattern p = npcMentionPattern;
+        if (p == null) {
+            synchronized (this) {
+                p = npcMentionPattern;
+                if (p == null) {
+                    String kw = gameConfig().getNpcMentionPattern();
+                    p = Pattern.compile(kw != null ? kw : "@(.+?)\\s+(.+)");
+                    npcMentionPattern = p;
+                }
+            }
         }
-        return npcMentionPattern;
+        return p;
     }
 
+    /**
+     * 显式清空模式缓存。
+     *
+     * <p>通常无需手动调用 —— {@link #refreshPatternCacheIfNeeded()} 会通过配置版本号
+     * 自动检测配置重载并失效缓存。此方法保留供外部显式调用。</p>
+     */
     public void clearPatternCache() {
-        exploreKeywordsPattern = null;
-        moveKeywordsPattern = null;
-        npcMentionPattern = null;
+        synchronized (this) {
+            exploreKeywordsPattern = null;
+            moveKeywordsPattern = null;
+            npcMentionPattern = null;
+            patternCacheVersion = -1;
+        }
     }
 
     private String outputPrefix(String key) {
