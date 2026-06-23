@@ -251,10 +251,14 @@ public class GameStateManager {
         return null;
     }
 
-    /** 处理 REVELATION:Δ 标签 —— 修改揭露度 */
+    /** 处理 REVELATION:Δ 标签 —— 修改揭露度（单次正向增量上限+3） */
     private String handleRevelation(GameSession session, String deltaStr) {
         Integer delta = parseDelta(deltaStr);
         if (delta == null) return null;
+        if (delta > 3) {
+            log.warn("REVELATION tag clamped: {} -> +3 (single-tag positive cap)", delta);
+            delta = 3;
+        }
         session.getPlayer().addRevelation(delta);
         log.debug("Revelation {} -> now {}", delta > 0 ? "+" + delta : delta, session.getPlayer().getRevelation());
         return null;

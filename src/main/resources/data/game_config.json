@@ -31,19 +31,19 @@
   "autoPickupLimit": 1,
   "archiveMapId": "map_archive_10f",
   "archiveRevelationBonus": 3,
-  "explorationRevelationBonus": 1,
+  "explorationRevelationBonus": 0,
   "npcDialogueRevelationBonus": 1,
   "npcUnlockSanityReward": 15,
   "puzzleRewards": {
     "revelation": {
-      "1": 5, "2": 7, "3": 9, "4": 11, "default": 11
+      "1": 3, "2": 5, "3": 7, "4": 9, "default": 9
     },
     "sanity": {
       "1": 2, "2": 2, "3": 2, "4": 2, "default": 2
     }
   },
   "chapterRevelationRewards": {
-    "ch2": 3, "ch3": 5, "ch4": 7, "ch5": 10, "default": 2
+    "ch2": 2, "ch3": 3, "ch4": 5, "ch5": 7, "default": 2
   },
   "startingMapId": "map_sewer_b1",
   "startingChapter": "ch1",
