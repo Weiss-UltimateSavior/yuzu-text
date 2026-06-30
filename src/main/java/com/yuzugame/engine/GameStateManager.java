@@ -448,7 +448,7 @@ public class GameStateManager {
      * <ul>
      *   <li>ACTIVATE — 激活谜题（已解决/已失败的谜题忽略）</li>
      *   <li>SOLVE — 标记谜题已解决，清除活跃谜题ID</li>
-     *   <li>FAIL — 标记谜题失败，递增尝试次数，清除活跃谜题ID</li>
+     *   <li>FAIL — 记录本次尝试未成功；谜题保持活跃，玩家可无限重试</li>
      * </ul>
      */
     private String handlePuzzle(GameSession session, String action, String param) {
@@ -498,7 +498,7 @@ public class GameStateManager {
      * <ul>
      *   <li>currentMapId → 新地图ID</li>
      *   <li>exitUnlocked → false</li>
-     *   <li>mapAutoTriggered → false（过渡描写由 GameEngine 统一生成）</li>
+     *   <li>mapAutoTriggered → false（地图过渡描写由 GameEngine 在同一回合统一生成）</li>
      *   <li>mapEntryTurn → 当前回合</li>
      *   <li>currentArea → null</li>
      *   <li>activePuzzleId → null</li>

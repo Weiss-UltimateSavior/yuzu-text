@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -146,20 +145,16 @@ public class DirectorAI extends BaseAgent {
     }
 
     /**
-     * D1 修复：结局规则按条件数量降序匹配，条件越多的规则优先级越高，
-     * 避免宽泛规则吞掉精确规则。
+     * 结局规则按配置优先级匹配，优先级越小越先判定。
      */
     public String determineEndingAction(GameSession session, StoryConfig story) {
         List<EndingRuleConfig> rules = dataLoader.getEndingRules();
         if (rules == null) return null;
 
-        // 按条件数量降序排列，条件越多的规则越具体，优先匹配
-        List<EndingRuleConfig> sortedRules = rules.stream()
-                .filter(r -> r.getConditions() != null && !r.getConditions().isEmpty())
-                .sorted(Comparator.comparingInt((EndingRuleConfig r) -> r.getConditions().size()).reversed())
-                .toList();
-
-        for (EndingRuleConfig rule : sortedRules) {
+        for (EndingRuleConfig rule : rules) {
+            if (rule.getConditions() == null || rule.getConditions().isEmpty()) {
+                continue;
+            }
             boolean conditionsMet = evaluateEndingConditions(session, rule);
             if (!conditionsMet) continue;
 

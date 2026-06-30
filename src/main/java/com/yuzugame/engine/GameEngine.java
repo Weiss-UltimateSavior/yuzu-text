@@ -26,7 +26,7 @@ import static com.yuzugame.engine.GameStateManager.AgentType;
  * <p>核心流程（每回合）：
  * <ol>
  *   <li>回合计数 + 理智自然衰减</li>
- *   <li>首次进入新地图时自动环境描写（mapAutoTriggered 标志）</li>
+ *   <li>地图切换后即时生成过渡环境描写</li>
  *   <li>柚子（主角AI）对玩家输入的回应（NPC对话时跳过）</li>
  *   <li>探索关键词匹配 → 地图AI环境描写 + 自动激活谜题
  *       （出口已开+移动关键词时跳过；谜题活跃时跳过地图AI描述）</li>
@@ -231,23 +231,7 @@ public class GameEngine {
         session.incrementTurn();
         applySanityDecay(session, story);
 
-        // ---- 步骤2：首次进入新地图时自动环境描写 ----
-        // mapAutoTriggered 由 GameStateManager.handleMap() 在地图切换时设置
-        // 若玩家本轮输入含探索关键词，则跳过自动描写（Step4 会补上），避免重复
-        if (session.isMapAutoTriggered()) {
-            session.setMapAutoTriggered(false);
-            if (!exploreKeywords().matcher(playerMessage).find()) {
-                String mapDesc = mapAI.autoDescribe(session, currentMap);
-                String autoStripped = stateManager.stripInternal(mapDesc);
-                if (!autoStripped.isBlank()) {
-                    outputs.add(outputPrefix("environment") + autoStripped);
-                    session.addChatMessage(new GameSession.ChatMessage("MAP_AI", null, autoStripped));
-                }
-                stateManager.applyControlTags(session, mapDesc, AgentType.MAP);
-            }
-        }
-
-        // ---- 步骤3：柚子（主角AI）回应（与NPC对话时跳过） ----
+        // ---- 步骤2：柚子（主角AI）回应（与NPC对话时跳过） ----
         // NPC对话时跳过柚子回应，避免同一轮出现两个角色抢话
         boolean isNpcDialogue = npcMention().matcher(playerMessage).find();
         session.addChatMessage(new GameSession.ChatMessage("PLAYER", null, playerMessage));
@@ -261,7 +245,7 @@ public class GameEngine {
             stateManager.applyControlTags(session, yuzuResponse, AgentType.PROTAGONIST);
         }
 
-        // ---- 步骤4：探索关键词匹配 → 地图AI环境描写 ----
+        // ---- 步骤3：探索关键词匹配 → 地图AI环境描写 ----
         // 跳过条件：谜题已激活 → 地图AI描述与谜题AI描述冗余，由谜题AI统一处理环境叙事
         // 注意：出口已解锁时仍允许探索，MapAI 会根据上下文判断玩家是否要离开并输出 MAP:mapId 标签
         boolean hasActivePuzzle = session.getActivePuzzleId() != null;
@@ -318,7 +302,7 @@ public class GameEngine {
             log.debug("Exploration revelation: +1 -> now {}", session.getPlayer().getRevelation());
         }
 
-        // ---- 步骤5：NPC交互（@NPC名 消息格式） ----
+        // ---- 步骤4：NPC交互（@NPC名 消息格式） ----
         // 解析 @NPC名 消息格式，自动解锁满足条件的NPC，执行对话
         // NPC交互与柚子回应互斥：Step3 已跳过柚子
         Matcher npcMatcher = npcMention().matcher(playerMessage);
@@ -387,7 +371,7 @@ public class GameEngine {
             }
         }
 
-        // ---- 步骤6：活跃谜题处理 ----
+        // ---- 步骤5：活跃谜题处理 ----
         // 当有激活的谜题时，所有玩家输入都经过谜题AI处理
         // 谜题AI负责判定交互是否有效、推进解谜进度、输出 PUZZLE:SOLVE/FAIL 标签
         if (session.getActivePuzzleId() != null) {
@@ -400,6 +384,7 @@ public class GameEngine {
                     session.addChatMessage(new GameSession.ChatMessage("PUZZLE_AI", null, puzzleStripped));
                 }
                 stateManager.applyControlTags(session, puzzleResp, AgentType.PUZZLE);
+                recordPuzzleMemory(session, puzzle.getId(), playerMessage, puzzleStripped, gameConfig().getMaxPuzzleMemoryRounds());
 
                 // 谜题解决后：清理谜题记忆 + 基于难度的揭露度/理智奖励
                 // 奖励表（按难度1~5递增）：
@@ -547,6 +532,22 @@ public class GameEngine {
         }
 
         return String.join("\n\n", outputs);
+    }
+
+    static void recordPuzzleMemory(GameSession session, String puzzleId, String playerMessage,
+                                   String puzzleResponse, int maxRounds) {
+        if (session == null || puzzleId == null || puzzleId.isBlank()) {
+            return;
+        }
+        if (playerMessage != null && !playerMessage.isBlank()) {
+            session.addPuzzleMemoryEntry(puzzleId, new PuzzleMemoryEntry("user", playerMessage));
+        }
+        if (puzzleResponse != null && !puzzleResponse.isBlank()) {
+            session.addPuzzleMemoryEntry(puzzleId, new PuzzleMemoryEntry("assistant", puzzleResponse));
+        }
+        if (maxRounds > 0) {
+            session.truncatePuzzleMemory(puzzleId, maxRounds);
+        }
     }
 
     /**
