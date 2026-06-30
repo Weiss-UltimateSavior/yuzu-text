@@ -1,5 +1,6 @@
 package com.yuzugame.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.yuzugame.util.CodeUtils;
 
 import java.util.*;
@@ -76,6 +77,7 @@ public class GameSession {
     public void setCustomLlmApiKey(String v) { this.customLlmApiKey = v; }
     public String getCustomLlmModel() { return customLlmModel; }
     public void setCustomLlmModel(String v) { this.customLlmModel = v; }
+    @JsonIgnore
     public boolean hasCustomLlm() {
         return customLlmBaseUrl != null && !customLlmBaseUrl.isBlank()
                 && customLlmApiKey != null && !customLlmApiKey.isBlank()
@@ -112,6 +114,7 @@ public class GameSession {
 
     public int getMapEntryTurn() { return mapEntryTurn; }
     public void setMapEntryTurn(int mapEntryTurn) { this.mapEntryTurn = mapEntryTurn; }
+    @JsonIgnore
     public int getMapTurns() { return turn - mapEntryTurn; }
 
     public String getCurrentArea() { return currentArea; }
@@ -170,6 +173,7 @@ public class GameSession {
     /**
      * 计算当前已解锁的 NPC 数量。
      */
+    @JsonIgnore
     public int getAliveNpcCount() {
         return unlockedNpcs.size();
     }
@@ -179,6 +183,7 @@ public class GameSession {
      *
      * <p>公式：{@code sanity + revelation + affection + aliveNpcCount * 10}</p>
      */
+    @JsonIgnore
     public int getScore() {
         return player.getSanity() + player.getRevelation() + player.getAffection() + getAliveNpcCount() * 10;
     }

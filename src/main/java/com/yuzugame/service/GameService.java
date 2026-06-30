@@ -6,6 +6,7 @@ import com.yuzugame.engine.GameEngine;
 import com.yuzugame.model.*;
 import com.yuzugame.repository.GameSessionEntity;
 import com.yuzugame.repository.GameSessionRepository;
+import com.yuzugame.util.CryptoUtils;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -367,7 +368,9 @@ public class GameService {
         try {
             String json = redisTemplate.opsForValue().get(REDIS_KEY_PREFIX + sessionId);
             if (json != null) {
-                return objectMapper.readValue(json, GameSession.class);
+                GameSession session = objectMapper.readValue(json, GameSession.class);
+                decryptRedisSensitiveFields(session);
+                return session;
             }
         } catch (Exception e) {
             log.warn("Failed to load session from Redis: {}", e.getMessage());
@@ -401,8 +404,8 @@ public class GameService {
         // 先写 Redis 缓存，保证后续读取可用
         cacheToRedis(session);
         // 同步尝试一次 MySQL 写入（快速失败）
+        GameSessionEntity entity = GameSessionEntity.fromModel(session, resolveEncryptionKey());
         try {
-            GameSessionEntity entity = GameSessionEntity.fromModel(session, resolveEncryptionKey());
             repository.findById(session.getSessionId()).ifPresent(existing -> {
                 entity.setCreatedAt(existing.getCreatedAt());
             });
@@ -411,12 +414,12 @@ public class GameService {
             log.error("MySQL save failed for session {}, queued for async retry: {}",
                     session.getSessionId(), e.getMessage());
             // 异步重试，不阻塞请求线程
-            asyncRetrySave(session);
+            asyncRetrySave(entity);
         }
     }
 
     /** 异步重试保存到 MySQL，最多 3 次，间隔递增 */
-    private void asyncRetrySave(GameSession session) {
+    private void asyncRetrySave(GameSessionEntity entitySnapshot) {
         retryExecutor.submit(() -> {
             for (int attempt = 1; attempt <= 3; attempt++) {
                 try {
@@ -426,20 +429,19 @@ public class GameService {
                     return;
                 }
                 try {
-                    GameSessionEntity entity = GameSessionEntity.fromModel(session, resolveEncryptionKey());
-                    repository.findById(session.getSessionId()).ifPresent(existing -> {
-                        entity.setCreatedAt(existing.getCreatedAt());
+                    repository.findById(entitySnapshot.getSessionId()).ifPresent(existing -> {
+                        entitySnapshot.setCreatedAt(existing.getCreatedAt());
                     });
-                    repository.save(entity);
+                    repository.save(entitySnapshot);
                     log.info("Async retry save succeeded for session {} on attempt {}",
-                            session.getSessionId(), attempt);
+                            entitySnapshot.getSessionId(), attempt);
                     return;
                 } catch (Exception e) {
                     log.warn("Async retry save attempt {}/3 failed for session {}: {}",
-                            attempt, session.getSessionId(), e.getMessage());
+                            attempt, entitySnapshot.getSessionId(), e.getMessage());
                 }
             }
-            log.error("All async retry attempts failed for session {}", session.getSessionId());
+            log.error("All async retry attempts failed for session {}", entitySnapshot.getSessionId());
         });
     }
 
@@ -448,11 +450,52 @@ public class GameService {
      */
     private void cacheToRedis(GameSession session) {
         try {
-            String json = objectMapper.writeValueAsString(session);
-            redisTemplate.opsForValue().set(REDIS_KEY_PREFIX + session.getSessionId(), json, REDIS_TTL_HOURS, TimeUnit.HOURS);
+            GameSession redisSession = prepareSessionForRedis(session);
+            String redisKey = REDIS_KEY_PREFIX + session.getSessionId();
+            if (redisSession == null) {
+                redisTemplate.delete(redisKey);
+                return;
+            }
+            String json = objectMapper.writeValueAsString(redisSession);
+            redisTemplate.opsForValue().set(redisKey, json, REDIS_TTL_HOURS, TimeUnit.HOURS);
         } catch (Exception e) {
             log.warn("Failed to cache session to Redis: {}", e.getMessage());
         }
+    }
+
+    GameSession prepareSessionForRedis(GameSession session) throws Exception {
+        String apiKey = session.getCustomLlmApiKey();
+        if (apiKey == null || apiKey.isBlank()) {
+            return session;
+        }
+
+        String encryptionKey = resolveEncryptionKey();
+        if (encryptionKey == null) {
+            log.warn("Skipping Redis cache for session {} because it contains a custom LLM API key and FIELD_ENCRYPTION_KEY is not configured",
+                    session.getSessionId());
+            return null;
+        }
+
+        GameSession copy = objectMapper.readValue(objectMapper.writeValueAsString(session), GameSession.class);
+        if (!CryptoUtils.isEncrypted(apiKey)) {
+            copy.setCustomLlmApiKey(CryptoUtils.encryptWithPrefix(apiKey, encryptionKey));
+        }
+        return copy;
+    }
+
+    void decryptRedisSensitiveFields(GameSession session) {
+        String apiKey = session.getCustomLlmApiKey();
+        String encryptionKey = resolveEncryptionKey();
+        if (apiKey == null || apiKey.isBlank() || !CryptoUtils.isEncrypted(apiKey)) {
+            return;
+        }
+        if (encryptionKey == null) {
+            log.warn("Redis session {} contains encrypted custom LLM API key but FIELD_ENCRYPTION_KEY is not configured",
+                    session.getSessionId());
+            session.setCustomLlmApiKey(null);
+            return;
+        }
+        session.setCustomLlmApiKey(CryptoUtils.decryptWithPrefix(apiKey, encryptionKey));
     }
 
     private void evictRedis(String sessionId) {

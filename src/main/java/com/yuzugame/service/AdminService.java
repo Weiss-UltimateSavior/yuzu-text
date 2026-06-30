@@ -28,6 +28,10 @@ public class AdminService {
 
     private static final Logger log = LoggerFactory.getLogger(AdminService.class);
     private static final ObjectMapper mapper = new ObjectMapper();
+    public static final long MAX_IMPORT_ZIP_BYTES = 5L * 1024 * 1024;
+    public static final int MAX_IMPORT_FILES = 50;
+    public static final long MAX_IMPORT_FILE_BYTES = 1024L * 1024;
+    public static final long MAX_IMPORT_TOTAL_UNZIPPED_BYTES = 5L * 1024 * 1024;
 
     private final GameSessionRepository sessionRepo;
     private final FeedbackRepository feedbackRepo;
@@ -526,47 +530,69 @@ public class AdminService {
     }
 
     public int importData(byte[] zipBytes) throws Exception {
+        if (zipBytes == null || zipBytes.length == 0) {
+            throw new IllegalArgumentException("Import file is empty");
+        }
+        if (zipBytes.length > MAX_IMPORT_ZIP_BYTES) {
+            throw new IllegalArgumentException("Import zip is too large");
+        }
+
         String dir = resolveDataDir();
         File folder = new File(dir);
         if (!folder.exists()) {
             folder.mkdirs();
         }
 
-        java.util.zip.ZipInputStream zis = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(zipBytes));
         int count = 0;
-        java.util.zip.ZipEntry entry;
-        while ((entry = zis.getNextEntry()) != null) {
-            if (entry.isDirectory()) continue;
-            String name = entry.getName();
-            if (!name.endsWith(".json")) continue;
+        long totalUnzippedBytes = 0;
+        try (java.util.zip.ZipInputStream zis = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(zipBytes))) {
+            java.util.zip.ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                if (entry.isDirectory()) continue;
+                String name = entry.getName();
+                if (!name.endsWith(".json")) continue;
 
-            int slashIdx = name.lastIndexOf('/');
-            if (slashIdx >= 0) name = name.substring(slashIdx + 1);
+                int slashIdx = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
+                if (slashIdx >= 0) name = name.substring(slashIdx + 1);
+                if (name.isBlank()) continue;
 
-            if (isProtectedFile(name)) {
-                log.warn("Skipping protected file in import: {}", name);
-                continue;
-            }
+                if (isProtectedFile(name)) {
+                    log.warn("Skipping protected file in import: {}", name);
+                    continue;
+                }
 
-            File target = resolveSecureFile(dir, name);
-            java.io.ByteArrayOutputStream fileBaos = new java.io.ByteArrayOutputStream();
-            byte[] buf = new byte[4096];
-            int len;
-            while ((len = zis.read(buf)) > 0) {
-                fileBaos.write(buf, 0, len);
+                if (count >= MAX_IMPORT_FILES) {
+                    throw new IllegalArgumentException("Import contains too many JSON files");
+                }
+
+                File target = resolveSecureFile(dir, name);
+                java.io.ByteArrayOutputStream fileBaos = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[4096];
+                int len;
+                long fileBytes = 0;
+                while ((len = zis.read(buf)) > 0) {
+                    fileBytes += len;
+                    totalUnzippedBytes += len;
+                    if (fileBytes > MAX_IMPORT_FILE_BYTES) {
+                        throw new IllegalArgumentException("Imported JSON file is too large: " + name);
+                    }
+                    if (totalUnzippedBytes > MAX_IMPORT_TOTAL_UNZIPPED_BYTES) {
+                        throw new IllegalArgumentException("Import unzipped data is too large");
+                    }
+                    fileBaos.write(buf, 0, len);
+                }
+                String fileContent = fileBaos.toString("UTF-8");
+                try {
+                    mapper.readTree(fileContent);
+                } catch (Exception e) {
+                    log.warn("Skipping invalid JSON in import: {} - {}", name, e.getMessage());
+                    continue;
+                }
+                java.nio.file.Files.writeString(target.toPath(), fileContent);
+                log.info("Imported data file: {}", name);
+                count++;
             }
-            String fileContent = fileBaos.toString("UTF-8");
-            try {
-                mapper.readTree(fileContent);
-            } catch (Exception e) {
-                log.warn("Skipping invalid JSON in import: {} - {}", name, e.getMessage());
-                continue;
-            }
-            java.nio.file.Files.writeString(target.toPath(), fileContent);
-            log.info("Imported data file: {}", name);
-            count++;
         }
-        zis.close();
         return count;
     }
 }

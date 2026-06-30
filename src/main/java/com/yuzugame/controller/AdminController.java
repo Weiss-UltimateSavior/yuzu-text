@@ -43,11 +43,24 @@ public class AdminController {
     /** 提取真实客户端 IP，考虑 X-Forwarded-For 头 */
     private String extractClientIp(HttpServletRequest request) {
         String xff = request.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            // 取第一个 IP（最原始的客户端）
-            return xff.split(",")[0].trim();
+        return resolveClientIp(xff, request);
+    }
+
+    String resolveClientIp(String forwardedFor, HttpServletRequest request) {
+        String remoteAddr = request.getRemoteAddr();
+        if (forwardedFor != null && !forwardedFor.isBlank() && isTrustedProxy(remoteAddr)) {
+            return forwardedFor.split(",")[0].trim();
         }
-        return request.getRemoteAddr();
+        return remoteAddr;
+    }
+
+    boolean isTrustedProxy(String addr) {
+        try {
+            java.net.InetAddress inet = java.net.InetAddress.getByName(addr);
+            return inet.isLoopbackAddress() || inet.isSiteLocalAddress();
+        } catch (java.net.UnknownHostException e) {
+            return false;
+        }
     }
 
     @GetMapping("/stats/players")
@@ -143,6 +156,9 @@ public class AdminController {
         requireAuth(token);
         Map<String, Object> result = new LinkedHashMap<>();
         try {
+            if (file.getSize() > AdminService.MAX_IMPORT_ZIP_BYTES) {
+                throw new IllegalArgumentException("Import zip is too large");
+            }
             int count = adminService.importData(file.getBytes());
             result.put("success", true);
             result.put("importedFiles", count);
